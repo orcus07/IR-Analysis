@@ -34,6 +34,7 @@ from ir_analysis.prompts import SYSTEM_PROMPT, build_user_prompt
 ROOT = Path(__file__).resolve().parent.parent
 CONFIG_PATH = ROOT / "config" / "config.yaml"
 PERSONA_DIR = ROOT / "config" / "personas"
+STYLE_GUIDE_PATH = ROOT / "config" / "style_guide.md"
 
 # Opus 4.8/4.7/4.6 + Sonnet 4.6 의 동적 필터링 웹검색 변형
 WEB_SEARCH_TOOL_TYPE = "web_search_20260209"
@@ -90,6 +91,13 @@ def run(args: argparse.Namespace) -> Path:
         output_language=persona.get("output_language", "한국어"),
     )
 
+    system_prompt = SYSTEM_PROMPT
+    if STYLE_GUIDE_PATH.exists():
+        system_prompt += (
+            "\n\n[우리말 작성 스타일 가이드 — 반드시 준수]\n"
+            + STYLE_GUIDE_PATH.read_text(encoding="utf-8")
+        )
+
     client = anthropic.Anthropic()
     tools = [{
         "type": WEB_SEARCH_TOOL_TYPE,
@@ -108,7 +116,7 @@ def run(args: argparse.Namespace) -> Path:
         with client.messages.stream(
             model=args.model,
             max_tokens=args.max_tokens,
-            system=SYSTEM_PROMPT,
+            system=system_prompt,
             thinking={"type": "adaptive"},
             output_config={"effort": args.effort},
             tools=tools,

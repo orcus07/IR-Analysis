@@ -56,6 +56,7 @@ python -m ir_analysis.analyze --persona samsung_strategy --target "Micron Techno
 ```
 config/
   config.yaml                 # 기본 실행 설정(페르소나/대상/경쟁사/모델 등)
+  style_guide.md              # 우리말 작성 규칙(번역체 줄이기 등) — 시스템 프롬프트에 자동 주입
   personas/
     sk_hynix_marketer.yaml    # 기본 페르소나
     _template.yaml            # 새 관점용 템플릿
