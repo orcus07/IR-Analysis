@@ -11,7 +11,8 @@ services:
   - type: web
     name: ir-analysis
     runtime: static
-    buildCommand: pip install pyyaml && python -m render.build
+    # 재빌드를 시도하되, 실패하면 커밋돼 있는 docs/index.html 을 그대로 서빙한다.
+    buildCommand: (python3 -m pip install pyyaml && python3 -m render.build) || echo "using committed docs/"
     staticPublishPath: docs
     envVars:
       - key: PYTHON_VERSION
