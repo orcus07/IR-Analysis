@@ -1,0 +1,77 @@
+# 회사·관점을 입력하면 실적·컨콜 분석을 돌리고 렌더 뷰어까지 갱신해 커밋한다.
+#
+# 사용: GitHub → Actions → "IR Analyze" → Run workflow
+#   - target: 분석할 회사 (예: "Micron Technology")
+#   - persona: config/personas/<id>.yaml 의 id
+#   - competitors: 쉼표 구분 (비우면 config 기본값)
+#
+# 필요 설정: 저장소 Secrets 에 ANTHROPIC_API_KEY 등록.
+# 결과: analyses/*.md 생성 + docs/index.html 재빌드 → 실행한 브랜치에 커밋.
+#       (docs/ 를 GitHub Pages 소스로 지정하면 모바일에서 바로 열람)
+
+name: IR Analyze
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "분석 대상 회사"
+        required: true
+        default: "Micron Technology"
+      persona:
+        description: "관점(페르소나 id)"
+        required: true
+        default: "sk_hynix_marketer"
+      competitive:
+        description: "경쟁사 비교"
+        type: boolean
+        default: true
+      competitors:
+        description: "경쟁사(쉼표 구분, 비우면 config 기본값)"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install deps
+        run: pip install -r requirements.txt
+
+      - name: Run analysis
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          ARGS=(--target "${{ inputs.target }}" --persona "${{ inputs.persona }}")
+          if [ "${{ inputs.competitive }}" = "true" ]; then
+            ARGS+=(--competitive)
+            if [ -n "${{ inputs.competitors }}" ]; then
+              IFS=',' read -ra COMPS <<< "${{ inputs.competitors }}"
+              ARGS+=(--competitors "${COMPS[@]}")
+            fi
+          else
+            ARGS+=(--no-competitive)
+          fi
+          python -m ir_analysis.analyze "${ARGS[@]}"
+
+      - name: Rebuild viewer
+        run: python -m render.build
+
+      - name: Commit results
+        run: |
+          git config user.name "ir-analysis-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add analyses docs
+          git diff --cached --quiet && echo "변경 없음" && exit 0
+          git commit -m "Add analysis: ${{ inputs.target }} (${{ inputs.persona }})"
+          git push

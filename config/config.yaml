@@ -1,0 +1,20 @@
+# 기본 실행 설정 — CLI 인자로 항목별 덮어쓸 수 있습니다.
+# few-shot 기본 케이스: SK하이닉스 마케터 관점에서 마이크론 분석 + 경쟁사(SK하이닉스·삼성) 비교
+
+persona: sk_hynix_marketer          # config/personas/<persona>.yaml
+target: "Micron Technology"          # 실적·컨콜을 분석할 회사
+competitive: true                    # 경쟁사 비교 on/off
+competitors:                         # competitive=true일 때 동일 프레임으로 비교
+  - "SK하이닉스 (SK hynix)"
+  - "삼성전자 (Samsung Electronics)"
+
+# 모델 선택 — 우선순위: 품질 1순위 / 비용 2순위
+#   claude-fable-5   품질 최상(기본). 가장 유능, 장기 에이전틱·판단 강함. $10/$50, ZDR 불가(30일 보존 필요)
+#   claude-opus-4-8  균형. Fable에 근접하며 비용 절반($5/$25). 비용 부담되면 이걸로
+#   claude-sonnet-5  비용형(대량 배치). 품질 1순위 용도엔 비권장
+# Fable/Mythos 모델은 안전 분류기 거부 시 Opus 4.8로 자동 폴백하도록 파이프라인이 처리한다.
+model: claude-fable-5
+effort: xhigh                        # low | medium | high | xhigh | max  (품질 민감 작업은 xhigh 권장)
+max_tokens: 32000
+max_search_uses: 25                  # 웹검색 호출 상한
+output_dir: analyses

@@ -1,0 +1,18 @@
+# 페르소나 템플릿 — 새 관점을 만들 때 이 파일을 복사하세요.
+#   cp config/personas/_template.yaml config/personas/<id>.yaml
+# 그런 다음 --persona <id> 로 호출합니다.
+
+id: my_persona                       # 파일명(확장자 제외)과 동일하게
+name: 표시 이름                       # 예: "삼성 전략기획", "바이사이드 애널리스트"
+viewpoint: >                          # 누구의 시각에서, 무엇을 위해 해석하는가
+  (이 페르소나가 분석 결과를 어떤 목적·입장에서 읽는지 1~3문장)
+
+focus_lenses:                         # 임플리케이션 도출 시 집중할 축(자유롭게 가감)
+  - "렌즈 1"
+  - "렌즈 2"
+  - "렌즈 3"
+
+industry_context: >                   # 산업/경쟁 구도 배경(웹검색 방향 잡기용)
+  (분석 대상이 속한 산업과 주요 경쟁사 등)
+
+output_language: 한국어                # 보고서 언어

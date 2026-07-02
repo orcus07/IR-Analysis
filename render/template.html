@@ -1,0 +1,324 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>IR Analysis — 실적·컨콜 비교 분석</title>
+<style>
+  :root {
+    --bg: #fafaf8; --fg: #1f2328; --muted: #6a737d; --line: #e2e2dd;
+    --card: #ffffff; --accent: #0b57d0; --quote: #f2f4f8; --th: #f4f4f1;
+    --warn: #9a6700;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14161a; --fg: #e6e8eb; --muted: #98a1ab; --line: #2c313a;
+      --card: #1b1f26; --accent: #7fb0ff; --quote: #20242c; --th: #21262e;
+      --warn: #d4a72c;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font: 15px/1.7 -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo",
+      "Pretendard", "Noto Sans KR", "Malgun Gothic", sans-serif;
+    -webkit-text-size-adjust: 100%;
+  }
+  header {
+    position: sticky; top: 0; z-index: 10; background: var(--bg);
+    border-bottom: 1px solid var(--line); padding: 10px 16px;
+  }
+  header h1 { margin: 0 0 8px; font-size: 17px; }
+  header h1 small { color: var(--muted); font-weight: 400; font-size: 12px; margin-left: 6px; }
+  .controls { display: flex; gap: 8px; flex-wrap: wrap; }
+  .controls select {
+    flex: 1 1 160px; min-width: 0; padding: 7px 8px; font-size: 14px;
+    color: var(--fg); background: var(--card); border: 1px solid var(--line);
+    border-radius: 8px;
+  }
+  .runner { max-width: 780px; margin: 10px auto 0; font-size: 13.5px; }
+  .runner summary {
+    cursor: pointer; color: var(--accent); font-weight: 600;
+    list-style-position: inside; -webkit-user-select: none; user-select: none;
+  }
+  .runner-body {
+    margin-top: 8px; padding: 12px; background: var(--card);
+    border: 1px solid var(--line); border-radius: 10px;
+    display: grid; gap: 8px;
+  }
+  .runner-body label { display: grid; gap: 3px; color: var(--muted); font-size: 12.5px; }
+  .runner-body label.row { grid-template-columns: auto 1fr; align-items: center; color: var(--fg); font-size: 13.5px; }
+  .runner-body input[type="text"], .runner-body input[type="password"], .runner-body select {
+    padding: 7px 8px; font-size: 14px; color: var(--fg); background: var(--bg);
+    border: 1px solid var(--line); border-radius: 8px; width: 100%;
+  }
+  .runner-body button {
+    padding: 9px; font-size: 14px; font-weight: 600; color: #fff;
+    background: var(--accent); border: 0; border-radius: 8px; cursor: pointer;
+  }
+  .runner-body button:disabled { opacity: .5; cursor: default; }
+  #run-status { font-size: 13px; min-height: 1em; }
+  #run-status a { color: var(--accent); }
+  .runner-note { color: var(--muted); font-size: 11.5px; line-height: 1.5; }
+  main { max-width: 780px; margin: 0 auto; padding: 16px 16px 64px; }
+  .meta { color: var(--muted); font-size: 12.5px; margin-bottom: 14px; }
+  article h1 { font-size: 21px; line-height: 1.35; margin: 8px 0 12px; }
+  article h2 {
+    font-size: 17px; margin: 28px 0 10px; padding-bottom: 6px;
+    border-bottom: 1px solid var(--line);
+  }
+  article h3 { font-size: 15.5px; margin: 20px 0 8px; }
+  article p { margin: 10px 0; }
+  article a { color: var(--accent); text-decoration: none; }
+  article a:hover { text-decoration: underline; }
+  article hr { border: 0; border-top: 1px solid var(--line); margin: 24px 0; }
+  article blockquote {
+    margin: 12px 0; padding: 8px 14px; background: var(--quote);
+    border-left: 3px solid var(--accent); border-radius: 0 8px 8px 0;
+    color: var(--fg); font-size: 14.5px;
+  }
+  article ul, article ol { margin: 8px 0; padding-left: 22px; }
+  article li { margin: 4px 0; }
+  article code {
+    background: var(--quote); padding: 1px 5px; border-radius: 4px;
+    font-size: 13px;
+  }
+  .tablewrap { overflow-x: auto; margin: 12px 0; border: 1px solid var(--line); border-radius: 8px; }
+  table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+  th, td { padding: 7px 10px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+  td + td, th + th { border-left: 1px solid var(--line); }
+  th { background: var(--th); font-weight: 600; white-space: nowrap; }
+  tr:last-child td { border-bottom: 0; }
+  .footer-note { color: var(--muted); font-size: 12px; margin-top: 40px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>📊 IR Analysis<small id="count"></small></h1>
+  <div class="controls">
+    <select id="sel-target" aria-label="분석 대상"></select>
+    <select id="sel-report" aria-label="보고서"></select>
+  </div>
+  <details class="runner" id="runner">
+    <summary>▶ 새 분석 실행</summary>
+    <div class="runner-body">
+      <label>분석 대상 회사
+        <input type="text" id="run-target" placeholder="예: NVIDIA" list="target-list">
+      </label>
+      <datalist id="target-list"></datalist>
+      <label>관점(페르소나)
+        <select id="run-persona"></select>
+      </label>
+      <label class="row"><input type="checkbox" id="run-competitive" checked> 경쟁사 비교</label>
+      <label>경쟁사 (쉼표 구분, 비우면 기본값)
+        <input type="text" id="run-competitors" placeholder="예: SK hynix, Samsung Electronics">
+      </label>
+      <label>실행 브랜치
+        <input type="text" id="run-branch">
+      </label>
+      <label>GitHub 토큰 (fine-grained, 이 저장소 Actions: Read and write)
+        <input type="password" id="run-token" placeholder="github_pat_… — 이 브라우저에만 저장">
+      </label>
+      <button id="run-btn">Actions로 분석 실행</button>
+      <div id="run-status"></div>
+      <div class="runner-note">
+        토큰은 localStorage에만 저장하고 어디에도 전송하지 않는다(GitHub API 호출 제외).
+        공용 기기에서는 쓰지 말 것. 실행에는 저장소 Secrets의 ANTHROPIC_API_KEY가 필요하다.
+        완료 후 Pages 반영까지 1~2분 걸린다.
+      </div>
+    </div>
+  </details>
+</header>
+<main>
+  <div class="meta" id="meta"></div>
+  <article id="report"></article>
+  <p class="footer-note">공개 정보 기반 참고용 분석 · 투자 권유 아님 ·
+    새 보고서는 <code>python -m ir_analysis.analyze</code> →
+    <code>python -m render.build</code> 로 누적된다.</p>
+</main>
+<script>
+/*__DATA__*/
+
+// ---------- 최소 마크다운 렌더러 (보고서 서식 전용: 제목/표/인용/목록/인라인) ----------
+function esc(s) {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+function inline(s) {
+  s = esc(s);
+  s = s.replace(/`([^`]+)`/g, "<code>$1</code>");
+  s = s.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+  s = s.replace(/\*([^*\n]+)\*/g, "<em>$1</em>");
+  s = s.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g,
+    '<a href="$2" target="_blank" rel="noopener">$1</a>');
+  return s;
+}
+function renderMd(md) {
+  const lines = md.split(/\r?\n/);
+  const out = [];
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i];
+
+    if (/^\s*$/.test(line)) { i++; continue; }
+
+    const h = line.match(/^(#{1,6})\s+(.*)$/);
+    if (h) { out.push(`<h${h[1].length}>${inline(h[2])}</h${h[1].length}>`); i++; continue; }
+
+    if (/^(-{3,}|\*{3,})\s*$/.test(line)) { out.push("<hr>"); i++; continue; }
+
+    if (/^\s*\|/.test(line)) {                       // 표
+      const rows = [];
+      while (i < lines.length && /^\s*\|/.test(lines[i])) rows.push(lines[i++]);
+      const cells = r => r.replace(/^\s*\|/, "").replace(/\|\s*$/, "").split("|").map(c => c.trim());
+      let html = '<div class="tablewrap"><table>';
+      const hasSep = rows.length > 1 && /^[\s|:-]+$/.test(rows[1]);
+      const head = cells(rows[0]);
+      html += "<thead><tr>" + head.map(c => `<th>${inline(c)}</th>`).join("") + "</tr></thead><tbody>";
+      for (let r = hasSep ? 2 : 1; r < rows.length; r++) {
+        html += "<tr>" + cells(rows[r]).map(c => `<td>${inline(c)}</td>`).join("") + "</tr>";
+      }
+      out.push(html + "</tbody></table></div>");
+      continue;
+    }
+
+    if (/^>\s?/.test(line)) {                        // 인용
+      const q = [];
+      while (i < lines.length && /^>\s?/.test(lines[i])) q.push(lines[i++].replace(/^>\s?/, ""));
+      out.push(`<blockquote><p>${inline(q.join(" "))}</p></blockquote>`);
+      continue;
+    }
+
+    const isUl = s => /^\s*[-*]\s+/.test(s), isOl = s => /^\s*\d+\.\s+/.test(s);
+    if (isUl(line) || isOl(line)) {                  // 목록 (연속 들여쓰기 줄 병합)
+      const ordered = isOl(line);
+      const items = [];
+      while (i < lines.length && (isUl(lines[i]) || isOl(lines[i]) || /^\s{2,}\S/.test(lines[i]))) {
+        if (isUl(lines[i]) || isOl(lines[i])) {
+          items.push(lines[i].replace(/^\s*([-*]|\d+\.)\s+/, ""));
+        } else {
+          items[items.length - 1] += " " + lines[i].trim();
+        }
+        i++;
+      }
+      const tag = ordered ? "ol" : "ul";
+      out.push(`<${tag}>` + items.map(t => `<li>${inline(t)}</li>`).join("") + `</${tag}>`);
+      continue;
+    }
+
+    const para = [line];                             // 문단 (연속 줄 병합)
+    i++;
+    while (i < lines.length && lines[i].trim() &&
+           !/^(#{1,6}\s|>\s?|\s*\||\s*[-*]\s|\s*\d+\.\s|-{3,}\s*$)/.test(lines[i])) {
+      para.push(lines[i++]);
+    }
+    out.push(`<p>${inline(para.join(" "))}</p>`);
+  }
+  return out.join("\n");
+}
+
+// ---------- 셀렉터 UI ----------
+const $t = document.getElementById("sel-target");
+const $r = document.getElementById("sel-report");
+const $meta = document.getElementById("meta");
+const $article = document.getElementById("report");
+document.getElementById("count").textContent = ` 보고서 ${REPORTS.length}건`;
+
+const targets = ["전체", ...new Set(REPORTS.map(r => r.target))];
+$t.innerHTML = targets.map(t => `<option>${esc(t)}</option>`).join("");
+
+function fillReports() {
+  const t = $t.value;
+  const list = REPORTS.filter(r => t === "전체" || r.target === t);
+  $r.innerHTML = list.map(r =>
+    `<option value="${esc(r.id)}">${esc(r.date)} · ${esc(r.title)}</option>`).join("");
+  show();
+}
+function show() {
+  const rep = REPORTS.find(r => r.id === $r.value) || REPORTS[0];
+  if (!rep) return;
+  $meta.textContent = [`${rep.date}`, `대상: ${rep.target}`, `관점: ${rep.persona}`,
+                       rep.quarter && `기간: ${rep.quarter}`].filter(Boolean).join("  ·  ");
+  $article.innerHTML = renderMd(rep.md);
+  window.scrollTo(0, 0);
+}
+$t.addEventListener("change", fillReports);
+$r.addEventListener("change", show);
+fillReports();
+
+// ---------- 새 분석 실행 (GitHub Actions workflow_dispatch) ----------
+const $$ = id => document.getElementById(id);
+const API = `https://api.github.com/repos/${CONFIG.owner}/${CONFIG.repo}/actions`;
+const ghHeaders = token => ({
+  "Authorization": `Bearer ${token}`,
+  "Accept": "application/vnd.github+json",
+  "X-GitHub-Api-Version": "2022-11-28",
+});
+
+$$("run-persona").innerHTML =
+  CONFIG.personas.map(p => `<option>${esc(p)}</option>`).join("");
+$$("run-branch").value = CONFIG.branch;
+$$("run-token").value = localStorage.getItem("ir_gh_token") || "";
+$$("target-list").innerHTML =
+  [...new Set(REPORTS.map(r => r.target))].map(t => `<option value="${esc(t)}">`).join("");
+
+$$("run-btn").addEventListener("click", async () => {
+  const token = $$("run-token").value.trim();
+  const target = $$("run-target").value.trim();
+  const status = $$("run-status");
+  if (!token) { status.textContent = "토큰이 필요합니다."; return; }
+  if (!target) { status.textContent = "분석 대상을 입력하세요."; return; }
+  localStorage.setItem("ir_gh_token", token);
+  $$("run-btn").disabled = true;
+  status.textContent = "실행 요청 중…";
+  try {
+    const res = await fetch(`${API}/workflows/${CONFIG.workflow}/dispatches`, {
+      method: "POST",
+      headers: ghHeaders(token),
+      body: JSON.stringify({
+        ref: $$("run-branch").value.trim(),
+        inputs: {
+          target,
+          persona: $$("run-persona").value,
+          competitive: $$("run-competitive").checked ? "true" : "false",
+          competitors: $$("run-competitors").value.trim(),
+        },
+      }),
+    });
+    if (res.status !== 204) {
+      throw new Error(`HTTP ${res.status} — ${(await res.text()).slice(0, 200)}`);
+    }
+    status.textContent = "요청됨 — 실행 시작을 기다리는 중…";
+    setTimeout(() => poll(token, Date.now()), 6000);
+  } catch (e) {
+    status.textContent = "실패: " + e.message +
+      " (토큰 권한·브랜치명을 확인하세요)";
+    $$("run-btn").disabled = false;
+  }
+});
+
+async function poll(token, since) {
+  const status = $$("run-status");
+  try {
+    const branch = encodeURIComponent($$("run-branch").value.trim());
+    const res = await fetch(
+      `${API}/workflows/${CONFIG.workflow}/runs?branch=${branch}&per_page=1`,
+      { headers: ghHeaders(token) });
+    const run = (await res.json()).workflow_runs?.[0];
+    // 방금 요청한 실행만 추적 (2분 여유)
+    if (run && new Date(run.created_at).getTime() > since - 120000) {
+      const link = ` — <a href="${run.html_url}" target="_blank" rel="noopener">로그 보기</a>`;
+      if (run.status === "completed") {
+        $$("run-btn").disabled = false;
+        status.innerHTML = run.conclusion === "success"
+          ? "✅ 분석 완료. 1~2분 뒤 새로고침하면 목록에 나타납니다." + link
+          : `❌ 실패 (${run.conclusion})` + link;
+        return;
+      }
+      status.innerHTML = `⏳ 실행 중 (${run.status}) — 보통 5~10분 걸립니다.` + link;
+    }
+  } catch (e) { /* 일시적 네트워크 오류는 다음 폴링에서 회복 */ }
+  setTimeout(() => poll(token, since), 15000);
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,325 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>IR Analysis — 실적·컨콜 비교 분석</title>
+<style>
+  :root {
+    --bg: #fafaf8; --fg: #1f2328; --muted: #6a737d; --line: #e2e2dd;
+    --card: #ffffff; --accent: #0b57d0; --quote: #f2f4f8; --th: #f4f4f1;
+    --warn: #9a6700;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14161a; --fg: #e6e8eb; --muted: #98a1ab; --line: #2c313a;
+      --card: #1b1f26; --accent: #7fb0ff; --quote: #20242c; --th: #21262e;
+      --warn: #d4a72c;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font: 15px/1.7 -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo",
+      "Pretendard", "Noto Sans KR", "Malgun Gothic", sans-serif;
+    -webkit-text-size-adjust: 100%;
+  }
+  header {
+    position: sticky; top: 0; z-index: 10; background: var(--bg);
+    border-bottom: 1px solid var(--line); padding: 10px 16px;
+  }
+  header h1 { margin: 0 0 8px; font-size: 17px; }
+  header h1 small { color: var(--muted); font-weight: 400; font-size: 12px; margin-left: 6px; }
+  .controls { display: flex; gap: 8px; flex-wrap: wrap; }
+  .controls select {
+    flex: 1 1 160px; min-width: 0; padding: 7px 8px; font-size: 14px;
+    color: var(--fg); background: var(--card); border: 1px solid var(--line);
+    border-radius: 8px;
+  }
+  .runner { max-width: 780px; margin: 10px auto 0; font-size: 13.5px; }
+  .runner summary {
+    cursor: pointer; color: var(--accent); font-weight: 600;
+    list-style-position: inside; -webkit-user-select: none; user-select: none;
+  }
+  .runner-body {
+    margin-top: 8px; padding: 12px; background: var(--card);
+    border: 1px solid var(--line); border-radius: 10px;
+    display: grid; gap: 8px;
+  }
+  .runner-body label { display: grid; gap: 3px; color: var(--muted); font-size: 12.5px; }
+  .runner-body label.row { grid-template-columns: auto 1fr; align-items: center; color: var(--fg); font-size: 13.5px; }
+  .runner-body input[type="text"], .runner-body input[type="password"], .runner-body select {
+    padding: 7px 8px; font-size: 14px; color: var(--fg); background: var(--bg);
+    border: 1px solid var(--line); border-radius: 8px; width: 100%;
+  }
+  .runner-body button {
+    padding: 9px; font-size: 14px; font-weight: 600; color: #fff;
+    background: var(--accent); border: 0; border-radius: 8px; cursor: pointer;
+  }
+  .runner-body button:disabled { opacity: .5; cursor: default; }
+  #run-status { font-size: 13px; min-height: 1em; }
+  #run-status a { color: var(--accent); }
+  .runner-note { color: var(--muted); font-size: 11.5px; line-height: 1.5; }
+  main { max-width: 780px; margin: 0 auto; padding: 16px 16px 64px; }
+  .meta { color: var(--muted); font-size: 12.5px; margin-bottom: 14px; }
+  article h1 { font-size: 21px; line-height: 1.35; margin: 8px 0 12px; }
+  article h2 {
+    font-size: 17px; margin: 28px 0 10px; padding-bottom: 6px;
+    border-bottom: 1px solid var(--line);
+  }
+  article h3 { font-size: 15.5px; margin: 20px 0 8px; }
+  article p { margin: 10px 0; }
+  article a { color: var(--accent); text-decoration: none; }
+  article a:hover { text-decoration: underline; }
+  article hr { border: 0; border-top: 1px solid var(--line); margin: 24px 0; }
+  article blockquote {
+    margin: 12px 0; padding: 8px 14px; background: var(--quote);
+    border-left: 3px solid var(--accent); border-radius: 0 8px 8px 0;
+    color: var(--fg); font-size: 14.5px;
+  }
+  article ul, article ol { margin: 8px 0; padding-left: 22px; }
+  article li { margin: 4px 0; }
+  article code {
+    background: var(--quote); padding: 1px 5px; border-radius: 4px;
+    font-size: 13px;
+  }
+  .tablewrap { overflow-x: auto; margin: 12px 0; border: 1px solid var(--line); border-radius: 8px; }
+  table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+  th, td { padding: 7px 10px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+  td + td, th + th { border-left: 1px solid var(--line); }
+  th { background: var(--th); font-weight: 600; white-space: nowrap; }
+  tr:last-child td { border-bottom: 0; }
+  .footer-note { color: var(--muted); font-size: 12px; margin-top: 40px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>📊 IR Analysis<small id="count"></small></h1>
+  <div class="controls">
+    <select id="sel-target" aria-label="분석 대상"></select>
+    <select id="sel-report" aria-label="보고서"></select>
+  </div>
+  <details class="runner" id="runner">
+    <summary>▶ 새 분석 실행</summary>
+    <div class="runner-body">
+      <label>분석 대상 회사
+        <input type="text" id="run-target" placeholder="예: NVIDIA" list="target-list">
+      </label>
+      <datalist id="target-list"></datalist>
+      <label>관점(페르소나)
+        <select id="run-persona"></select>
+      </label>
+      <label class="row"><input type="checkbox" id="run-competitive" checked> 경쟁사 비교</label>
+      <label>경쟁사 (쉼표 구분, 비우면 기본값)
+        <input type="text" id="run-competitors" placeholder="예: SK hynix, Samsung Electronics">
+      </label>
+      <label>실행 브랜치
+        <input type="text" id="run-branch">
+      </label>
+      <label>GitHub 토큰 (fine-grained, 이 저장소 Actions: Read and write)
+        <input type="password" id="run-token" placeholder="github_pat_… — 이 브라우저에만 저장">
+      </label>
+      <button id="run-btn">Actions로 분석 실행</button>
+      <div id="run-status"></div>
+      <div class="runner-note">
+        토큰은 localStorage에만 저장하고 어디에도 전송하지 않는다(GitHub API 호출 제외).
+        공용 기기에서는 쓰지 말 것. 실행에는 저장소 Secrets의 ANTHROPIC_API_KEY가 필요하다.
+        완료 후 Pages 반영까지 1~2분 걸린다.
+      </div>
+    </div>
+  </details>
+</header>
+<main>
+  <div class="meta" id="meta"></div>
+  <article id="report"></article>
+  <p class="footer-note">공개 정보 기반 참고용 분석 · 투자 권유 아님 ·
+    새 보고서는 <code>python -m ir_analysis.analyze</code> →
+    <code>python -m render.build</code> 로 누적된다.</p>
+</main>
+<script>
+const REPORTS = [{"id": "2026-07-02_dram-big3_pilot", "title": "DRAM 빅3 비교 — 마이크론 FQ3'26 vs 삼성전자·SK하이닉스 CY1Q'26", "date": "2026-07-02", "target": "DRAM Big 3 (Micron·Samsung·SK hynix)", "persona": "neutral_dram_observer", "quarter": "Micron FQ3'26 (2026-03~05) / Samsung·SK CY1Q'26 (2026-01~03)", "md": "# DRAM 빅3 비교 — 마이크론 FQ3'26 vs 삼성전자·SK하이닉스 CY1Q'26\n\n**파일럿 케이스.** 관점은 중립(DRAM 시장 관찰자)이며, 세 회사를 같은 프레임으로\n대칭 비교한다. 분석 축은 ① 분기 정량 ② DRAM 세부(ASP·점유율) ③ 컨콜 톤(원문\n발췌) ④ 항목별 차이 ⑤ 시사점.\n\n## 기간 정합성 — 회계연도(FY) ↔ 달력연도(CY) 매핑\n\n| 회사 | 보고 분기 | 실제 기간 | 발표일 | 시점 차이 |\n|---|---|---|---|---|\n| Micron | FY2026 3분기(FQ3'26) | **2026-03 ~ 2026-05** (5/28 마감) | 2026-06-24 | 기준점(가장 최신) |\n| SK하이닉스 | CY2026 1분기(1Q26) | **2026-01 ~ 2026-03** | 2026-04-23 | 마이크론보다 약 2개월 과거 |\n| 삼성전자 | CY2026 1분기(1Q26) | **2026-01 ~ 2026-03** | 2026-04-30 | 마이크론보다 약 2개월 과거 |\n\n가격이 매달 오르는 국면이라 **2개월 차이가 마진·ASP를 크게 벌린다.** 마이크론\n수치가 더 좋게 보이는 부분 상당수는 시점 효과다. 직접 비교하는 표에는 이 점을\n매번 표시했다. 삼성·SK의 CY2Q'26(4~6월) 실적은 7월 말 발표 예정이라 이 보고서에\n없다.\n\n## 데이터 신뢰도\n\n- 세 회사 IR 원문(마이크론 prepared remarks PDF, SK하이닉스 뉴스룸, 삼성 뉴스룸)이\n  모두 HTTP 403으로 막혔다. 수치는 복수 매체로 교차 확인했고, **발언 발췌는 2차\n  전사 기준이라 원문 1:1 대조를 못 했다.** 어절 단위 정확성이 필요하면 IR 원문\n  대조가 필요하다.\n- ⚠️ 표시 항목은 매체 간 수치가 다르거나 기간 기준이 명시되지 않아 확인이 필요하다.\n\n## 1. 분기 스코어보드 (정량)\n\n| 지표 | Micron FQ3'26 | SK하이닉스 1Q26 | 삼성전자 1Q26 |\n|---|---|---|---|\n| 매출 | $41.46B (+346% YoY) | ₩52.58T ≈ $35.5B (+198% YoY, +60% QoQ) | ₩133.9T ≈ $90.6B (+69% YoY) — 전사 |\n| 그중 메모리/DRAM | DRAM $31.3B (매출의 76%) | 전사가 사실상 메모리 | 메모리 매출 ₩74.8T (DS ₩81.7T 중) |\n| 영업이익 | $33.68B (non-GAAP, 마진 81.2%) | ₩37.61T (마진 72%) | 전사 ₩57.23T (+755% YoY), DS ₩53.7T (마진 약 66%) |\n| 순이익/EPS | EPS $25.11 (non-GAAP) | 순이익 ₩40.35T ⚠️ | — |\n| 다음 분기 가이던스 | 매출 $50B±1B, GM ~86%, EPS $31±1 | 공식 수치 가이던스 없음(수요 초과 지속 전망) | 공식 수치 가이던스 없음(2Q 수요 강세 전망) |\n\n⚠️ SK하이닉스는 순이익(₩40.35T)이 영업이익(₩37.61T)보다 크다. 영업외 이익이\n포함된 것으로 보이나 원문을 확인하지 못했다.\n\n주의: 마이크론 마진은 non-GAAP, 한국 두 회사는 K-IFRS 영업이익이라 **기준이 달라\n절대 비교는 참고용**이다. 여기에 2개월 시점 차이(그 사이 가격 급등)까지 겹친다.\n\n## 2. DRAM 세부 — ASP·점유율\n\n### 분기 ASP 변화 (QoQ)\n\n| 회사 | DRAM ASP 변화 | 기간 |\n|---|---|---|\n| Micron | +low-60%대 (비트 출하는 한 자릿수 초반 증가) | FQ3'26 (3~5월) |\n| SK하이닉스 | +mid-60%대 | 1Q26 (1~3월) |\n| 삼성전자 | ⚠️ \"+146%\" 보도 있으나 QoQ/YoY 기준 미확인 | 1Q26 (1~3월) |\n\n세 회사 모두 \"출하보다 가격\"이 성장을 끌었다. 참고로 PC DRAM 고정거래가는 2026년\n3월 $13로 11개월 연속 올랐다.\n\n### CY1Q'26 DRAM 매출 점유율 (Omdia 기준, 달력분기로 환산 집계)\n\n| 회사 | DRAM 매출 | 점유율 | QoQ 변화 |\n|---|---|---|---|\n| 삼성전자 | $37.4B | **38.6%** (1위) | +2.1pp (36.5%→38.6%) |\n| SK하이닉스 | $28.0B | 28.8% (2위) | −4.1pp (32.9%→28.8%) |\n| Micron | $21.7B | 22.4% (3위) | −0.4pp (22.8%→22.4%) |\n\n- TrendForce 집계도 삼성 38.5%로 거의 같다. 삼성이 톱3 중 ASP 상승 폭이 가장\n  컸고 서버 DRAM 매출 비중도 가장 컸다는 평가다.\n- HBM만 보면 순위가 뒤집힌다: **SK하이닉스가 56.4%로 1위**(1Q26 기준).\n- 정리하면 1Q26의 그림은 \"범용 DRAM 가격 급등 국면에서 삼성이 전체 DRAM 1위\n  격차를 약 10pp로 벌렸고, HBM 주도권은 여전히 SK하이닉스\"다.\n\n## 3. 컨콜 톤 비교 — 원문 발췌\n\n발췌는 모두 2차 전사 기준(원문 1:1 대조 미완료).\n\n### Micron — \"사이클을 계약으로 끝냈다\"는 톤\n\n> \"(We are) very pleased with our HBM4 product and Micron's shipments already of HBM4 of over $1 billion.\" — Sanjay Mehrotra, FQ3'26 콜\n\n> \"Supply shortages in memory and storage will take considerable time to improve, even as we expect industry supply to improve gradually in 2028.\"\n\n- 16건의 장기 공급계약(SCA)이 핵심 메시지다. 잔여 계약액(RPO) 약 **$100B**,\n  take-or-pay에 가격 하한까지 걸어 \"역대 최고 마진보다 높은 수준을 보장\"한다고\n  했다. 실적 서프라이즈보다 **계약 구조로 사이클 변동성 자체를 없앴다**는 서사에\n  힘을 실었다.\n- 공급이 수요를 따라잡을 시점은 \"가시성이 없다\"고 했고, 신규 팹 의미 있는 출하는\n  FY2028에나 가능하다고 못 박았다.\n\n### SK하이닉스 — \"구조적 역전, 과잉공급 위험은 관리된다\"는 톤\n\n> \"Despite supply expansion, demand structurally outpaces supply. Long-term visibility from customer partnerships reduces oversupply risk.\" — 김우현 CFO, 1Q26 콜\n\n> \"The importance of memory has become greater than ever ... as this supply-demand imbalance persists, customers are prioritizing procurement over price.\" — 경영진, 1Q26 콜\n\n- 2026년 HBM 물량은 완판이고 부족은 2027년까지 이어진다고 봤다. HBM4E는 하반기\n  샘플, 2027년 양산 목표다.\n- 용인 1기 클린룸 오픈을 2027년 2월로 3개월 당겼다. \"수요는 구조적, 공급 확대는\n  계획대로\"라는 수성(守成)형 메시지다. 고객이 가격보다 물량 확보를 우선한다는\n  발언은 가격 협상력이 완전히 공급자에게 넘어왔다는 뜻이다.\n\n### 삼성전자 — \"부족은 더 심해진다, 범용도 우리 무기\"라는 톤\n\n> (2차 전사 요지) 공급은 이미 수요에 크게 못 미치고, **이미 받은 주문 기준으로\n> 2027년의 수급 격차는 2026년보다 더 벌어진다.** — 김재준 메모리사업부장, 1Q26 콜\n\n- 셋 중 공급 부족 경고가 가장 셌다. 2026년 HBM 매출을 전년의 3배 이상으로 늘린다는\n  계획도 밝혔다.\n- 특이점은 **\"요즘은 범용 DRAM이 HBM보다 수익성이 좋다\"**는 취지의 발언이다.\n  HBM 후발이라는 약점을 범용 DRAM 초강세 국면이 상쇄해 주는 지금 구도를\n  솔직하게 드러냈다. 2월에 HBM4 양산을 시작(엔비디아 베라 루빈향)했다는 점도\n  강조했다. ⚠️ HBM4 단가 $500~560, 마진 80% 이상이라는 보도는 매체 추정이다.\n\n## 4. 항목별 비교 — 같은 항목, 같은 톤으로\n\n| 항목 | Micron | SK하이닉스 | 삼성전자 | 핵심 차이 |\n|---|---|---|---|---|\n| 성장 서사 | 사이클 종식을 계약($100B RPO)으로 증명 | 구조적 수급 역전 + 장기 가시성으로 수성 | 부족 심화 경고 + 범용·HBM 양날개 | 마이크론은 **계약**, SK는 **구조**, 삼성은 **격차 확대 경고**를 앞세움 |\n| HBM 위치 | HBM4 누적 $1B, 램프가 HBM3E의 2배 속도 | 점유율 56.4% 1위, 2026 완판 | 2월 HBM4 양산 개시, 2026 매출 3배 계획 | 현재 1위는 SK, 추격 속도는 마이크론·삼성이 강조 |\n| 범용 DRAM | DRAM ASP +60%대(3~5월) | ASP +60%대 중반(1~3월) | 점유율 38.6%로 1위 격차 확대, ASP 상승 폭 최대 | 범용 가격 급등의 최대 수혜는 **삼성**(캐파·서버 DRAM 비중) |\n| 공급 전망 발언 | 정상화 \"가시성 없음\", 신규 팹은 FY28 | 부족 2027년까지, 용인 3개월 앞당김 | **2027년 격차가 2026년보다 커진다** | 셋 다 부족 지속. 경고 강도는 삼성 > 마이크론 > SK 순 |\n| 수익성(참고) | 영업마진 81.2% (non-GAAP, 3~5월) | 72% (K-IFRS, 1~3월) | DS 약 66% (K-IFRS, 1~3월) | 기준·시점이 달라 서열 단정 불가. 시점을 맞추면 격차는 줄어들 것 |\n| 가이던스 스타일 | 수치 가이던스(+21% QoQ 성장 제시) | 정성 전망만 | 정성 전망만 | 마이크론만 숫자로 자신감을 표현 — 미국식 관행 차이도 있음 |\n\n## 5. 시사점\n\n1. **세 회사 모두 \"부족 장기화\"를 말하지만 근거가 다르다.** 마이크론은 계약(RPO),\n   SK는 고객 파트너십 가시성, 삼성은 수주 잔량이다. 셋 다 자사에 유리한 프레임이라\n   교차 검증 지표(하이퍼스케일러 캐펙스, 웨이퍼 투입량)로 따로 확인해야 한다.\n2. **1Q26 점유율 이동은 '범용 DRAM 국면'의 산물이다.** 삼성의 +2.1pp는 HBM 역전이\n   아니라 범용 가격·캐파 효과다. HBM4/4E 전환이 본격화되는 2026 하반기~2027년에\n   점유율 그림이 다시 흔들릴 수 있다.\n3. **마이크론의 $100B take-or-pay는 업계 가격 구조를 바꾼다.** 가격 하한이 걸린\n   물량이 커질수록 다음 다운사이클의 바닥이 높아진다. 삼성·SK도 유사 계약을\n   요구받을 공산이 크고, 7월 말 2Q26 콜에서 확인할 첫 번째 포인트다.\n4. **다음 확인 시점: 삼성·SK의 CY2Q'26 발표(7월 말).** 마이크론 FQ3(3~5월)과\n   기간이 2개월 겹쳐, 이번 보고서에서 시점 차이로 유보한 마진·ASP 비교를 그때\n   제대로 맞춰볼 수 있다.\n\n## 6. 결론\n\n2026년 상반기 DRAM 시장은 \"공급자 시장\"이라는 말로도 부족한 초과수요 국면이다.\n같은 국면을 두고 세 회사의 화법이 갈린다. 마이크론은 계약으로 미래 마진을\n고정했다고 말하고, SK하이닉스는 구조적 우위를 지키고 있다고 말하며, 삼성은\n부족이 더 심해진다고 경고하면서 범용 DRAM 1위 격차를 벌렸다. 숫자는 셋 다\n사상 최고지만, **누가 이 사이클을 '구조'로 바꿔냈는지는 2027년 수급이 실제로\n어긋나는 순간 판가름 난다.**\n\n## Sources\n\n- [Micron FQ3'26 8-K press release (SEC)](https://www.sec.gov/Archives/edgar/data/0000723125/000072312526000013/a2026q3ex991-pressrelease.htm) · [Investing.com 콜 전사](https://www.investing.com/news/transcripts/earnings-call-transcript-micron-tops-q3-2026-estimates-shares-jump-146-93CH-4759504) · [CNBC](https://www.cnbc.com/2026/06/24/micron-mu-earnings-report-q3-2026.html) · [TechTimes](https://www.techtimes.com/articles/319032/20260625/micron-q3-2026-earnings-100b-contracts-signals-ai-memory-cycle-break.htm) · [Futurum](https://futurumgroup.com/insights/micron-q3-fy-2026-hbm-and-lpdram-drive-the-next-phase-of-ai-memory-growth/)\n- [SK hynix 1Q26 보도자료(뉴스룸)](https://news.skhynix.com/q1-2026-business-results/) · [CNBC](https://www.cnbc.com/2026/04/23/sk-hynix-earnings-ai-memory-shortage-hbm-demand.html) · [TechPowerUp](https://www.techpowerup.com/348448/sk-hynix-announces-1q26-financial-results) · [BigGo 콜 하이라이트](https://finance.biggo.com/news/KR_000660.KS_2026-04-23) · [StorageNewsletter](https://www.storagenewsletter.com/2026/04/29/sk-hynix-fiscal-1q26-financial-results/)\n- [삼성전자 1Q26 실적 발표(뉴스룸)](https://news.samsung.com/global/samsung-electronics-announces-first-quarter-2026-results) · [TechPowerUp](https://www.techpowerup.com/348675/samsung-q1-2026-results-memory-profit-up-nearly-50x-warns-of-2027-shortage) · [wccftech(범용 DRAM 수익성)](https://wccftech.com/samsung-q1-2026-earnings-conventional-dram-more-profitable-than-hbm-right-now/) · [DCD](https://www.datacenterdynamics.com/en/news/samsung-electronics-q1-26-operating-profit-exceeds-companys-fy25-full-year-total/)\n- 점유율: [TechTimes(Omdia 집계)](https://www.techtimes.com/articles/318052/20260609/samsung-leads-dram-market-share-386-sk-hynix-trails-revenue-tops-profit-margins.htm) · [TrendForce(ASP)](https://www.trendforce.com/news/2026/05/18/news-memory-supercycle-drives-1q26-price-surge-samsung-flags-146-asp-jump-sk-hynix-sees-mid-60-dram-gains/) · [Counterpoint](https://counterpointresearch.com/en/insights/global-dram-and-hbm-market-share)\n\n---\n*공개 정보 기반 참고용 분석이며 투자 권유가 아니다. 발췌 인용은 2차 전사 기준.*"}, {"id": "2026-06_micron-FQ3_persona-skhynix-marketer", "title": "마이크론 FQ3'26 실적·컨콜 분석 — SK하이닉스 마케터 관점", "date": "2026-06-25", "target": "Micron Technology", "persona": "sk_hynix_marketer", "quarter": "Micron FQ3'26 (2026-03~05) / 경쟁사 CY1Q'26 (2026-01~03)", "md": "# 마이크론 FQ3'26 실적·컨콜 분석 — SK하이닉스 마케터 관점\n\n> **케이스 설정**\n> - **페르소나(관점):** SK하이닉스 마케터\n> - **분석 대상:** Micron Technology, 회계연도 3분기(FQ3 FY2026)\n> - **경쟁 분석:** ON — SK하이닉스 / 삼성전자를 동일 프레임으로 정량·정성 비교\n> - **작성일:** 2026-06-25\n\n### 데이터 신뢰도 경고\n- **1차 사료 차단:** Micron SEC 8-K·IR 준비발언 PDF, Micron/삼성 컨콜 전사 원문은 자동 수집(WebFetch) 시 **403 차단**. 아래 수치·발언 발췌는 **2차 전사·보도 교차 확인본**(Investing.com 컨콜 전사, Yahoo Finance/ BigGo 전사, StockTitan, CNBC, wccftech, TechPowerUp 등)이다.\n- **발언 인용 표기:** §2·§4의 영문 발췌는 위 2차 전사가 옮긴 표현으로, **원문 PDF와 1:1 대조는 미완료**(403). 의미 단위로는 복수 매체에서 일치.\n- **⚠️ 확인 필요 항목:** Micron DRAM/NAND **세그먼트 절대액·비중**은 매체 간 수치가 상충($18.8B vs ~$32.8B 등) → **추정·확인 필요**로 표기.\n\n### 기간 정합성 — 회계연도 vs 캘린더 매핑\nMicron의 회계연도는 캘린더보다 약 1개 분기 앞선다(FY 종료 ≈ 8월 말). 따라서 같은 \"1분기/3분기\"라도 실제 기간이 다르다.\n\n| 회사 | 보고 명칭 | 실제 분기 기간 | 분기 종료 | 발표일 |\n|---|---|---|---|---|\n| **Micron** | FQ3 FY2026 | 2026년 **3~5월**(≈ 캘린더 2Q'26 초입) | 2026-05-28 | 2026-06-24 |\n| **SK하이닉스** | 1Q FY2026 = **CY1Q'26** | 2026년 **1~3월** | 2026-03-31 | 2026-04-23 |\n| **삼성전자** | 1Q FY2026 = **CY1Q'26** | 2026년 **1~3월** | 2026-03-31 | 2026-04-30 |\n\n> **⚠️ 비교 시 감안:** Micron 분기 종료(5/28)는 SK·삼성(3/31)보다 **약 2개월 더 최신**. 메모리 가격이 가파르게 오르는 국면이라, Micron 수치가 동일 사이클의 **더 늦은(=강한) 구간**을 반영한다. 절대 규모 비교보다 **QoQ 모멘텀·가이던스·톤**의 방향성 비교가 더 안전하다.\n\n---\n\n## 1. 마이크론 FQ3'26 — 정량 요약\n\n| 항목 | 수치 | 비고 |\n|---|---|---|\n| 매출 | **$41.5B** | QoQ +74% / YoY +346% (전분기 $23.86B) |\n| GAAP 총이익률 | **약 84.9% (~85%)** | 사상 최고 |\n| EPS | **$25.11** | 컨센서스 $20.28 대비 +23.8% 서프라이즈 |\n| 데이터센터 매출 | **>$25B** | 연환산 런레이트 **>$100B** |\n| CMBU(클라우드 메모리 BU) | $13.8B / GM 83% | 사상 최고 |\n| CDBU(코어 데이터센터 BU) | $11.5B / GM 87% | — |\n| DRAM 비중 | 매출의 **~79%** | ⚠️ 절대액 매체 간 상충($18.8B vs ~$32.8B), 확인 필요 |\n| NAND | 기록적 **$9.9B (~24%)** | ⚠️ 비중 합산 불일치, 확인 필요 |\n| HBM4 누적매출 | **>$1B** | HBM4 12단 램프가 HBM3E 12단 대비 **2배 속도** |\n\n**FQ4'26 가이던스:** 매출 **$50.0B ±$1.0B**, GAAP/Non-GAAP 총이익률 **약 86%**, GAAP EPS **$30.73 ±$1.00**, Non-GAAP EPS **$31.00 ±$1.00**, Non-GAAP 영업비용 ~$1.65B.\n\n**전략 고객 계약(SCA):** 16건, **최소 계약매출 약 $100B**, **선수금 $22B** 확보. CY2026 HBM 물량은 **가격·수량 전량 계약 완료(완판)**, HBM3E·HBM4는 **캘린더 2027까지 풀북, 수요는 2028까지** 연장.\n\n---\n\n## 2. 마이크론 컨콜 — 정성(톤) 발췌 분석\n\n각 항목은 **① 원문 발췌(영문, 2차 전사 기준) → ② 해석 → ③ SK하이닉스 시사점** 순.\n\n**① 계약 기반 사업으로 서사 전환**\n> *\"…strategic customer agreements … significantly enhance the **durability and predictability** of Micron's strong financial performance, accelerating the transformation of the business model.\"* — S. Mehrotra (준비발언, 2차 전사)\n- **해석:** 메모리를 사이클 사업이 아니라 **계약 기반의 예측 가능한 사업**이라고 정면에서 내세웠다.\n- **시사점:** 가격 사이클 우려를 말투로 미리 차단했다. SK도 같은 \"가시성\" 언어를 갖추지 못하면 신뢰 싸움에서 밀린다.\n\n**② HBM 점유율 의도적 절제**\n> *\"…we plan for our **market share in HBM to match our market share in DRAM**.\"* — Micron 경영진 (2차 전사)\n- **해석:** HBM이 웨이퍼를 많이 소모해 비(非)HBM 공급을 압박하므로, **HBM 1위를 노리지 않겠다**는 신호다.\n- **시사점:** SK가 HBM 점유율 1위·최대 생산능력을 더 공격적으로 마케팅할 여지가 생긴다.\n\n**③ 공급 타이트니스 장기 고착**\n> *\"HBM3E and HBM4 are **fully booked through calendar 2027**, with demand extending into 2028.\"* — Micron (2차 전사)\n- **해석:** 가격 강세 서사를 2027~28년까지 못박았다.\n- **시사점:** \"지금 계약하지 않으면 2027년 물량이 없다\"는 조기 계약 압박의 업계 공통 명분이 된다.\n\n**④ HBM4 램프 속도**\n> *\"…HBM4 12-high volume ramp is **tracking twice as fast** as HBM3E 12-high … over **$1 billion** in HBM4 revenue.\"* — Micron (2차 전사)\n- **해석:** HBM4 전환 속도를 숫자로 내세웠다.\n- **시사점:** SK는 HBM4를 **수율·전력 효율·검증된 양산 실적** 숫자로 차별화해 맞받아야 한다.\n\n**⑤ 수요 구조 변화**\n- 에이전틱 AI가 데이터센터를 구조적으로 재편 → 가속기 랙을 넘어 **CPU 랙·스토리지 랙**으로 메모리 계층 확장 (준비발언 취지).\n- **시사점:** 가속기향 HBM 일변도를 넘어 **서버 DRAM·eSSD·고용량 솔루션** 메시지로 외연 확장.\n\n---\n\n## 3. 경쟁 현황 — 정량 비교 (동일 프레임)\n\n각 행은 **세 회사를 같은 지표로 나란히** 두고, 마지막 열에 **핵심 차이(1줄)** 를 일관된 톤으로 적었다. ⚠️ 시점차(§기간 경고) 감안.\n\n| 지표 | **Micron** (FQ3'26, ~5/28) | **SK하이닉스** (CY1Q'26, 3/31) | **삼성 DS** (CY1Q'26, 3/31) | **핵심 차이** |\n|---|---|---|---|---|\n| 분기 매출 | $41.5B | ₩52.58조 | DS ₩81.7조 / 전사 ₩133.87조 | 절대 규모: **삼성DS > SK > Micron** |\n| 이익률 | GM **~85%** | 영업이익률 **72%** | DS가 전사 OP의 **94%** 차지 | 이익 밀도: **Micron·SK 동급 최상**, 삼성은 전사 의존도 편중 |\n| QoQ 모멘텀 | **+74%** | +60% | 전사 +69%(YoY OP +756%) | 최신 분기 모멘텀: **Micron 최고**(단, 2개월 더 최신) |\n| HBM 수급관 | CY26 **완판**, 27까지 풀북 | 향후 **3년 수요 > 생산능력** | 2027 **공급부족 경고** | 결론 동일(초과수요), **표현 강도만 차이** |\n| HBM4 단계 | 양산 중, 12단 2배속 램프 | 샘플 2H'26 → 양산 2027 | 2월 양산, Vera Rubin향 6세대 첫 공급 | 양산 시점: **삼성 선제 → Micron → SK** 순서 주장 |\n| ASP/가격 | 별도 미공시 | DRAM ASP **+mid-60%**, NAND +mid-30% | 컨벤셔널 DRAM이 **현재 HBM보다 고수익** | 가격 공시 투명도: **SK 최다**, 삼성은 구조 코멘트 중심 |\n\n---\n\n## 4. 경쟁 현황 — 정성(톤) 비교\n\n각 축마다 **세 회사를 같은 어법(한 줄 입장 + 발췌 앵커)** 으로 비교하고, **핵심 차이** 를 일관 톤으로 명시.\n\n| 축 | **Micron** | **SK하이닉스** | **삼성** | **핵심 차이** |\n|---|---|---|---|---|\n| **지배 서사** | \"durability & predictability\" — 계약 기반 전환 | 기록 경신 + **재무 규율(discipline)** | DS가 전사 OP 94% — \"편중된 이익 구조\" | Micron만 **'예측가능성'** 을 선점, 타사는 '기록·규율' |\n| **공급관** | \"fully booked through 2027, into 2028\" | \"수요 > 향후 3년 생산능력\"(김기태 HBM 영업) | 고객이 **2027 물량 선당김**, 갭 확대 | 메시지 동일(초과수요), Micron이 **연도 못박기** 가장 구체 |\n| **가격 구조** | CY26 HBM 가격·물량 완판(연간 고정가 함의) | ASP 급등 수치로 강세 입증 | **\"컨벤셔널 DRAM이 HBM보다 현재 수익↑\"**(HBM 연간 고정 vs 컨벤셔널 분기 협상) | 삼성만 **HBM 고정가의 단점**을 공개 — SK도 동일 노출 |\n| **점유율 태도** | HBM 점유율 **DRAM 수준으로 의도적 제한** | DDR5 수익 우선·HBM 램프 속도 조절(보도) | HBM4 선제 양산으로 **리더십 탈환** 시도 | Micron=절제 / 삼성=공세 / SK=수익 우선 — **삼성만 점유율 공세** |\n| **투자 기조** | SCA 선수금 **$22B** 로 캐펙스 뒷받침 | 캐펙스 대폭 확대(M15X·용인·EUV) | HBM 매출 2026년 **3배+** 목표 | 자금 조달 방식: Micron만 **고객 선수금 락인** 모델 |\n| **단기 이익 vs 규율** | 계약으로 변동성 축소 | \"규율\" 유지하며 증설 | **\"단기 이익 위해 방향 틀지 않음\"** 명시 | 세 회사 모두 규율 강조, **삼성이 가장 명시적** |\n\n---\n\n## 5. SK하이닉스 마케터를 위한 임플리케이션\n\n### A. 경쟁 위협 신호 (방어 필요)\n1. **Micron의 $100B SCA + $22B 선수금이 고객을 장기로 묶는다.** 메모리를 \"예측 가능한 계약 사업\"이라고 자리매김하는 서사를 Micron이 선점했다. → SK도 **장기·복수년 공급계약**을 마케팅 전면에 세워 \"공급 신뢰성\" 메시지를 빼앗기지 말아야 한다.\n2. **삼성 HBM4 선제 양산 + Nvidia Vera Rubin향 첫 공급** = SK가 내세운 HBM 기술 우위 서사에 직접 도전. → **12단 수율·전력 효율·검증된 양산 실적** 수치로 차별화한다.\n\n### B. 활용 가능한 기회 (공세)\n3. **Micron이 \"HBM 점유율을 DRAM 점유율 수준으로 제한\"** 공언 = HBM 1위를 노리지 않음. → SK가 **\"HBM 점유율 1위·최대 생산능력\"** 을 더 공격적으로 마케팅할 여지가 있다.\n4. **공급 부족이 2027년 이후까지 간다는 데 3사가 한목소리.** 가격 강세 서사가 업계 표준이 됐다. → **조기 계약 압박**(\"2027년 물량 선점\")의 명분으로 쓸 수 있다.\n\n### C. 전략·구조 통찰\n5. **삼성發 경고: \"컨벤셔널 DRAM이 지금은 HBM보다 수익이 높다 — HBM은 연간 고정가.\"** SK도 같은 구조에 놓여 있다. → **HBM 계약의 가격 재협상·연동 조항**을 IR·세일즈와 함께 점검해 상승장 이익이 새지 않게 막는다. 메시지에서도 \"HBM=프리미엄\"과 \"컨벤셔널 DDR5 강세\"를 **둘 다** 활용한다.\n6. **수요처 변화: 에이전틱 AI가 메모리 계층을 CPU 랙·스토리지 랙까지 넓힌다.** 가속기향 HBM 한 곬을 넘어 **서버 DRAM·eSSD·고용량 솔루션**으로 마케팅 외연을 넓힌다.\n\n### D. 톤 벤치마크\n7. Micron은 **\"durability/predictability\"** 로 사이클 우려를 차단했다. SK 메시지가 \"기록·규율\"에 머문다면 **\"장기 가시성\"** 언어를 보강해야 한다.\n\n---\n\n## 6. 한 줄 결론\n> Micron은 **계약 기반·완판·점유율 절제** 세 박자로 \"예측 가능성\" 서사를 선점했고, 삼성은 **HBM4 선제 양산과 가격 구조 솔직함**으로 차별화하고 있다. SK하이닉스 마케터는 (1) **장기계약·공급 신뢰성 메시지로 방어**하고, (2) **HBM 1위·최대 생산능력으로 공세**하며, (3) **HBM 연간 고정가의 위험을 점검**하는 세 가지를 동시에 끌고 가야 한다.\n\n---\n\n### 출처\n**컨콜 전사 / 발언(2차)**\n- [Investing.com — Micron FQ3'26 earnings call transcript](https://www.investing.com/news/transcripts/earnings-call-transcript-micron-tops-q3-2026-estimates-shares-jump-146-93CH-4759504)\n- [Yahoo Finance — SK hynix Q1 FY2026 earnings call transcript](https://finance.yahoo.com/quote/000660.KS/earnings/000660.KS-Q1-2026-earnings_call-547968.html)\n- [BigGo — SK hynix Q1 2026 call: demand exceeds 3-yr capacity](https://finance.biggo.com/news/KR_000660.KS_2026-04-23)\n- [wccftech — Samsung Q1'26: conventional DRAM more profitable than HBM](https://wccftech.com/samsung-q1-2026-earnings-conventional-dram-more-profitable-than-hbm-right-now/)\n\n**실적 수치 / 보도**\n- [Micron IR — Fiscal Q3 2026 prepared remarks (PDF, 1차·403)](https://investors.micron.com/static-files/631b1a32-5537-46ae-8f40-82e42fc79dfe)\n- [SEC 8-K — Micron FY2026 Q3 press release (1차·403)](https://www.sec.gov/Archives/edgar/data/0000723125/000072312526000013/a2026q3ex991-pressrelease.htm)\n- [StockTitan — Micron Q3 record results, Q4 guide $50B](https://www.stocktitan.net/news/MU/micron-technology-inc-reports-record-results-for-the-third-quarter-6f50161e5zxh.html)\n- [CNBC — Micron MU earnings Q3 2026](https://www.cnbc.com/2026/06/24/micron-mu-earnings-report-q3-2026.html)\n- [Investing.com — Micron Q3'26 slides: $100B customer agreements](https://www.investing.com/news/company-news/micron-q3-2026-slides-record-margins-100b-customer-agreements-93CH-4759276)\n- [TechTimes — Micron $100B contracts, AI memory cycle](https://www.techtimes.com/articles/319032/20260625/micron-q3-2026-earnings-100b-contracts-signals-ai-memory-cycle-break.htm)\n- [CNBC — SK hynix record Q1 profit](https://www.cnbc.com/2026/04/23/sk-hynix-earnings-ai-memory-shortage-hbm-demand.html)\n- [Samsung Global Newsroom — Q1 2026 results](https://news.samsung.com/global/samsung-electronics-announces-first-quarter-2026-results)\n- [TechPowerUp — Samsung Q1 2026, warns 2027 shortage](https://www.techpowerup.com/348675/samsung-q1-2026-results-memory-profit-up-nearly-50x-warns-of-2027-shortage)"}];
+const CONFIG = {"owner": "orcus07", "repo": "IR-Analysis", "branch": "claude/earnings-competitive-analysis-243bwy", "workflow": "analyze.yml", "personas": ["sk_hynix_marketer"]};
+
+// ---------- 최소 마크다운 렌더러 (보고서 서식 전용: 제목/표/인용/목록/인라인) ----------
+function esc(s) {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+function inline(s) {
+  s = esc(s);
+  s = s.replace(/`([^`]+)`/g, "<code>$1</code>");
+  s = s.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+  s = s.replace(/\*([^*\n]+)\*/g, "<em>$1</em>");
+  s = s.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g,
+    '<a href="$2" target="_blank" rel="noopener">$1</a>');
+  return s;
+}
+function renderMd(md) {
+  const lines = md.split(/\r?\n/);
+  const out = [];
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i];
+
+    if (/^\s*$/.test(line)) { i++; continue; }
+
+    const h = line.match(/^(#{1,6})\s+(.*)$/);
+    if (h) { out.push(`<h${h[1].length}>${inline(h[2])}</h${h[1].length}>`); i++; continue; }
+
+    if (/^(-{3,}|\*{3,})\s*$/.test(line)) { out.push("<hr>"); i++; continue; }
+
+    if (/^\s*\|/.test(line)) {                       // 표
+      const rows = [];
+      while (i < lines.length && /^\s*\|/.test(lines[i])) rows.push(lines[i++]);
+      const cells = r => r.replace(/^\s*\|/, "").replace(/\|\s*$/, "").split("|").map(c => c.trim());
+      let html = '<div class="tablewrap"><table>';
+      const hasSep = rows.length > 1 && /^[\s|:-]+$/.test(rows[1]);
+      const head = cells(rows[0]);
+      html += "<thead><tr>" + head.map(c => `<th>${inline(c)}</th>`).join("") + "</tr></thead><tbody>";
+      for (let r = hasSep ? 2 : 1; r < rows.length; r++) {
+        html += "<tr>" + cells(rows[r]).map(c => `<td>${inline(c)}</td>`).join("") + "</tr>";
+      }
+      out.push(html + "</tbody></table></div>");
+      continue;
+    }
+
+    if (/^>\s?/.test(line)) {                        // 인용
+      const q = [];
+      while (i < lines.length && /^>\s?/.test(lines[i])) q.push(lines[i++].replace(/^>\s?/, ""));
+      out.push(`<blockquote><p>${inline(q.join(" "))}</p></blockquote>`);
+      continue;
+    }
+
+    const isUl = s => /^\s*[-*]\s+/.test(s), isOl = s => /^\s*\d+\.\s+/.test(s);
+    if (isUl(line) || isOl(line)) {                  // 목록 (연속 들여쓰기 줄 병합)
+      const ordered = isOl(line);
+      const items = [];
+      while (i < lines.length && (isUl(lines[i]) || isOl(lines[i]) || /^\s{2,}\S/.test(lines[i]))) {
+        if (isUl(lines[i]) || isOl(lines[i])) {
+          items.push(lines[i].replace(/^\s*([-*]|\d+\.)\s+/, ""));
+        } else {
+          items[items.length - 1] += " " + lines[i].trim();
+        }
+        i++;
+      }
+      const tag = ordered ? "ol" : "ul";
+      out.push(`<${tag}>` + items.map(t => `<li>${inline(t)}</li>`).join("") + `</${tag}>`);
+      continue;
+    }
+
+    const para = [line];                             // 문단 (연속 줄 병합)
+    i++;
+    while (i < lines.length && lines[i].trim() &&
+           !/^(#{1,6}\s|>\s?|\s*\||\s*[-*]\s|\s*\d+\.\s|-{3,}\s*$)/.test(lines[i])) {
+      para.push(lines[i++]);
+    }
+    out.push(`<p>${inline(para.join(" "))}</p>`);
+  }
+  return out.join("\n");
+}
+
+// ---------- 셀렉터 UI ----------
+const $t = document.getElementById("sel-target");
+const $r = document.getElementById("sel-report");
+const $meta = document.getElementById("meta");
+const $article = document.getElementById("report");
+document.getElementById("count").textContent = ` 보고서 ${REPORTS.length}건`;
+
+const targets = ["전체", ...new Set(REPORTS.map(r => r.target))];
+$t.innerHTML = targets.map(t => `<option>${esc(t)}</option>`).join("");
+
+function fillReports() {
+  const t = $t.value;
+  const list = REPORTS.filter(r => t === "전체" || r.target === t);
+  $r.innerHTML = list.map(r =>
+    `<option value="${esc(r.id)}">${esc(r.date)} · ${esc(r.title)}</option>`).join("");
+  show();
+}
+function show() {
+  const rep = REPORTS.find(r => r.id === $r.value) || REPORTS[0];
+  if (!rep) return;
+  $meta.textContent = [`${rep.date}`, `대상: ${rep.target}`, `관점: ${rep.persona}`,
+                       rep.quarter && `기간: ${rep.quarter}`].filter(Boolean).join("  ·  ");
+  $article.innerHTML = renderMd(rep.md);
+  window.scrollTo(0, 0);
+}
+$t.addEventListener("change", fillReports);
+$r.addEventListener("change", show);
+fillReports();
+
+// ---------- 새 분석 실행 (GitHub Actions workflow_dispatch) ----------
+const $$ = id => document.getElementById(id);
+const API = `https://api.github.com/repos/${CONFIG.owner}/${CONFIG.repo}/actions`;
+const ghHeaders = token => ({
+  "Authorization": `Bearer ${token}`,
+  "Accept": "application/vnd.github+json",
+  "X-GitHub-Api-Version": "2022-11-28",
+});
+
+$$("run-persona").innerHTML =
+  CONFIG.personas.map(p => `<option>${esc(p)}</option>`).join("");
+$$("run-branch").value = CONFIG.branch;
+$$("run-token").value = localStorage.getItem("ir_gh_token") || "";
+$$("target-list").innerHTML =
+  [...new Set(REPORTS.map(r => r.target))].map(t => `<option value="${esc(t)}">`).join("");
+
+$$("run-btn").addEventListener("click", async () => {
+  const token = $$("run-token").value.trim();
+  const target = $$("run-target").value.trim();
+  const status = $$("run-status");
+  if (!token) { status.textContent = "토큰이 필요합니다."; return; }
+  if (!target) { status.textContent = "분석 대상을 입력하세요."; return; }
+  localStorage.setItem("ir_gh_token", token);
+  $$("run-btn").disabled = true;
+  status.textContent = "실행 요청 중…";
+  try {
+    const res = await fetch(`${API}/workflows/${CONFIG.workflow}/dispatches`, {
+      method: "POST",
+      headers: ghHeaders(token),
+      body: JSON.stringify({
+        ref: $$("run-branch").value.trim(),
+        inputs: {
+          target,
+          persona: $$("run-persona").value,
+          competitive: $$("run-competitive").checked ? "true" : "false",
+          competitors: $$("run-competitors").value.trim(),
+        },
+      }),
+    });
+    if (res.status !== 204) {
+      throw new Error(`HTTP ${res.status} — ${(await res.text()).slice(0, 200)}`);
+    }
+    status.textContent = "요청됨 — 실행 시작을 기다리는 중…";
+    setTimeout(() => poll(token, Date.now()), 6000);
+  } catch (e) {
+    status.textContent = "실패: " + e.message +
+      " (토큰 권한·브랜치명을 확인하세요)";
+    $$("run-btn").disabled = false;
+  }
+});
+
+async function poll(token, since) {
+  const status = $$("run-status");
+  try {
+    const branch = encodeURIComponent($$("run-branch").value.trim());
+    const res = await fetch(
+      `${API}/workflows/${CONFIG.workflow}/runs?branch=${branch}&per_page=1`,
+      { headers: ghHeaders(token) });
+    const run = (await res.json()).workflow_runs?.[0];
+    // 방금 요청한 실행만 추적 (2분 여유)
+    if (run && new Date(run.created_at).getTime() > since - 120000) {
+      const link = ` — <a href="${run.html_url}" target="_blank" rel="noopener">로그 보기</a>`;
+      if (run.status === "completed") {
+        $$("run-btn").disabled = false;
+        status.innerHTML = run.conclusion === "success"
+          ? "✅ 분석 완료. 1~2분 뒤 새로고침하면 목록에 나타납니다." + link
+          : `❌ 실패 (${run.conclusion})` + link;
+        return;
+      }
+      status.innerHTML = `⏳ 실행 중 (${run.status}) — 보통 5~10분 걸립니다.` + link;
+    }
+  } catch (e) { /* 일시적 네트워크 오류는 다음 폴링에서 회복 */ }
+  setTimeout(() => poll(token, since), 15000);
+}
+</script>
+</body>
+</html>
