@@ -57,6 +57,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     cfg = _load_yaml(CONFIG_PATH) if CONFIG_PATH.exists() else {}
     p = argparse.ArgumentParser(description="실적·컨콜 분석 + 관점별 임플리케이션")
     p.add_argument("--persona", default=cfg.get("persona", "sk_hynix_marketer"))
+    p.add_argument("--custom-persona", default=None, metavar="설명",
+                   help="페르소나를 YAML 없이 자유 서술로 지정 (--persona 무시)")
     p.add_argument("--target", default=cfg.get("target", "Micron Technology"))
     comp = p.add_mutually_exclusive_group()
     comp.add_argument("--competitive", dest="competitive", action="store_true")
@@ -78,10 +80,17 @@ def _slug(text: str) -> str:
 
 
 def run(args: argparse.Namespace) -> Path:
-    persona = load_persona(args.persona)
+    if args.custom_persona:
+        # 자유 서술 페르소나 — 첫 줄(또는 앞 40자)을 표시 이름으로 쓴다.
+        desc = args.custom_persona.strip()
+        persona = {"name": desc.splitlines()[0][:40], "viewpoint": desc}
+        persona_id = "custom-" + _slug(persona["name"])[:24]
+    else:
+        persona = load_persona(args.persona)
+        persona_id = args.persona
 
     user_prompt = build_user_prompt(
-        persona_name=persona.get("name", args.persona),
+        persona_name=persona.get("name", persona_id),
         persona_viewpoint=persona.get("viewpoint", ""),
         focus_lenses=persona.get("focus_lenses", []),
         industry_context=persona.get("industry_context", ""),
@@ -164,16 +173,16 @@ def run(args: argparse.Namespace) -> Path:
 
     out_dir = ROOT / args.output_dir
     out_dir.mkdir(parents=True, exist_ok=True)
-    fname = f"{_dt.date.today().isoformat()}_{_slug(args.target)}_{args.persona}.md"
+    fname = f"{_dt.date.today().isoformat()}_{_slug(args.target)}_{persona_id}.md"
     out_path = out_dir / fname
 
     # 렌더 뷰어(render/build.py)가 읽는 메타 — 보고서 앞에 프런트매터로 붙인다.
     front_matter = "\n".join([
         "---",
-        f'title: "{args.target} 실적·컨콜 분석 — {persona.get("name", args.persona)} 관점"',
+        f'title: "{args.target} 실적·컨콜 분석 — {persona.get("name", persona_id)} 관점"',
         f"date: {_dt.date.today().isoformat()}",
         f'target: "{args.target}"',
-        f"persona: {args.persona}",
+        f"persona: {persona_id}",
         f"competitive: {'true' if args.competitive else 'false'}",
         f"model: {args.model}",
         "---",

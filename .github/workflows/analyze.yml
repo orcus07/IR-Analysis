@@ -22,6 +22,10 @@ on:
         description: "관점(페르소나 id)"
         required: true
         default: "sk_hynix_marketer"
+      custom_persona:
+        description: "페르소나 직접 서술(입력하면 persona id 무시)"
+        required: false
+        default: ""
       competitive:
         description: "경쟁사 비교"
         type: boolean
@@ -52,7 +56,12 @@ jobs:
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
-          ARGS=(--target "${{ inputs.target }}" --persona "${{ inputs.persona }}")
+          ARGS=(--target "${{ inputs.target }}")
+          if [ -n "${{ inputs.custom_persona }}" ]; then
+            ARGS+=(--custom-persona "${{ inputs.custom_persona }}")
+          else
+            ARGS+=(--persona "${{ inputs.persona }}")
+          fi
           if [ "${{ inputs.competitive }}" = "true" ]; then
             ARGS+=(--competitive)
             if [ -n "${{ inputs.competitors }}" ]; then
