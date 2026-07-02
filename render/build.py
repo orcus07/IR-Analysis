@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -17,6 +18,7 @@ import yaml
 
 ROOT = Path(__file__).resolve().parent.parent
 ANALYSES_DIR = ROOT / "analyses"
+PERSONA_DIR = ROOT / "config" / "personas"
 TEMPLATE_PATH = Path(__file__).resolve().parent / "template.html"
 OUT_PATH = ROOT / "docs" / "index.html"
 
@@ -50,6 +52,30 @@ def parse_report(path: Path) -> dict:
     }
 
 
+def _git(*args: str) -> str:
+    return subprocess.check_output(["git", "-C", str(ROOT), *args],
+                                   text=True).strip()
+
+
+def build_config() -> dict:
+    """'새 분석 실행' 패널이 쓰는 저장소·워크플로 정보. git에서 유추한다."""
+    owner, repo = "orcus07", "IR-Analysis"
+    branch = "main"
+    try:
+        url = re.sub(r"\.git$", "", _git("remote", "get-url", "origin")).rstrip("/")
+        owner, repo = url.split("/")[-2:]
+    except Exception:
+        pass
+    try:
+        branch = _git("rev-parse", "--abbrev-ref", "HEAD")
+    except Exception:
+        pass
+    personas = sorted(p.stem for p in PERSONA_DIR.glob("*.yaml")
+                      if not p.stem.startswith("_"))
+    return {"owner": owner, "repo": repo, "branch": branch,
+            "workflow": "analyze.yml", "personas": personas}
+
+
 def main() -> None:
     paths = sorted(ANALYSES_DIR.glob("*.md"))
     if not paths:
@@ -59,8 +85,10 @@ def main() -> None:
 
     payload = json.dumps(reports, ensure_ascii=False)
     payload = payload.replace("</", "<\\/")  # </script> 조기 종료 방지
+    config = json.dumps(build_config(), ensure_ascii=False)
     html = TEMPLATE_PATH.read_text(encoding="utf-8").replace(
-        "/*__DATA__*/", f"const REPORTS = {payload};")
+        "/*__DATA__*/",
+        f"const REPORTS = {payload};\nconst CONFIG = {config};")
 
     OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     OUT_PATH.write_text(html, encoding="utf-8")
