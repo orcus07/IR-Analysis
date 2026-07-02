@@ -65,7 +65,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--competitors", nargs="*", default=cfg.get("competitors", []))
     p.add_argument("--model", default=cfg.get("model", "claude-opus-4-8"))
     p.add_argument("--effort", default=cfg.get("effort", "high"),
-                   choices=["low", "medium", "high", "max"])
+                   choices=["low", "medium", "high", "xhigh", "max"])
     p.add_argument("--max-tokens", type=int, default=cfg.get("max_tokens", 32000))
     p.add_argument("--max-search-uses", type=int, default=cfg.get("max_search_uses", 25))
     p.add_argument("--output-dir", default=cfg.get("output_dir", "analyses"))
@@ -109,22 +109,41 @@ def run(args: argparse.Namespace) -> Path:
     print(f"▶ 분석 시작: 대상={args.target} / 관점={persona.get('name')} / "
           f"경쟁분석={'ON' if args.competitive else 'OFF'}", file=sys.stderr)
 
+    # Fable 5 / Mythos 5: 안전 분류기가 거부(stop_reason=refusal)하면 Opus 4.8로
+    # 자동 폴백(품질·안정성). SDK가 미지원이면 일반 경로로 자연스럽게 내려간다.
+    is_fable = args.model.startswith(("claude-fable", "claude-mythos"))
+
+    def open_stream(msgs):
+        base = dict(
+            model=args.model, max_tokens=args.max_tokens, system=system_prompt,
+            thinking={"type": "adaptive"}, output_config={"effort": args.effort},
+            tools=tools, messages=msgs,
+        )
+        if is_fable:
+            try:
+                return client.beta.messages.stream(
+                    **base, betas=["server-side-fallback-2026-06-01"],
+                    fallbacks=[{"model": "claude-opus-4-8"}],
+                )
+            except TypeError:
+                pass  # 설치된 SDK가 fallbacks 미지원 → 일반 경로
+        return client.messages.stream(**base)
+
     # 서버측 웹검색은 한 응답 안에서 최대 10회 반복 후 pause_turn 으로 멈출 수 있다.
     # pause_turn 이면 대화를 그대로 다시 보내 이어서 진행한다.
     final = None
     for _ in range(8):  # pause_turn 연속 처리 상한
-        with client.messages.stream(
-            model=args.model,
-            max_tokens=args.max_tokens,
-            system=system_prompt,
-            thinking={"type": "adaptive"},
-            output_config={"effort": args.effort},
-            tools=tools,
-            messages=messages,
-        ) as stream:
-            for text in stream.text_stream:
-                print(text, end="", flush=True)
-            final = stream.get_final_message()
+        try:
+            with open_stream(messages) as stream:
+                for text in stream.text_stream:
+                    print(text, end="", flush=True)
+                final = stream.get_final_message()
+        except anthropic.BadRequestError as e:
+            hint = ""
+            if is_fable:
+                hint = (" — Fable/Mythos 5는 30일 데이터 보존이 필요합니다"
+                        "(ZDR 조직은 거부됨). --model claude-opus-4-8 로 바꿔 보세요.")
+            sys.exit(f"요청 거부(400): {getattr(e, 'message', e)}{hint}")
         print(file=sys.stderr)
 
         if final.stop_reason == "pause_turn":

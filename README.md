@@ -41,6 +41,16 @@ python -m ir_analysis.analyze --target "Micron Technology" --no-competitive
 
 CLI 인자는 `config/config.yaml` 의 기본값을 덮어쓴다.
 
+### 모델 선택 (품질 1순위 / 비용 2순위)
+
+| 모델 | 용도 | 비고 |
+|------|------|------|
+| `claude-fable-5` (기본) | 품질 최상 | 가장 유능·장기 에이전틱 강함. $10/$50, 30일 데이터 보존 필요(ZDR 불가) |
+| `claude-opus-4-8` | 균형 | Fable에 근접, 비용 절반($5/$25) |
+| `claude-sonnet-5` | 대량 배치 | 비용형 — 품질 1순위 용도엔 비권장 |
+
+Fable/Mythos 모델은 안전 분류기 거부 시 **Opus 4.8로 자동 폴백**한다(파이프라인 내장). 품질 민감 작업은 `--effort xhigh` 권장.
+
 ## 새 관점 추가
 
 페르소나는 `config/personas/<id>.yaml` 파일이다. 템플릿을 복사해 만든다:
