@@ -51,6 +51,32 @@ CLI 인자는 `config/config.yaml` 의 기본값을 덮어쓴다.
 
 Fable/Mythos 모델은 안전 분류기 거부 시 **Opus 4.8로 자동 폴백**한다(파이프라인 내장). 품질 민감 작업은 `--effort xhigh` 권장.
 
+## 렌더 뷰어 — 보고서 누적 열람
+
+분석할 때마다 보고서가 `analyses/` 에 쌓이고, 한 번의 빌드로 **모바일에서
+열리는 단일 HTML 뷰어**가 갱신된다. 뷰어 상단에서 **대상 회사 → 보고서**를
+고르면 해당 분석이 바로 렌더링된다.
+
+```bash
+python -m render.build     # analyses/*.md → docs/index.html (자급식, CDN 불필요)
+```
+
+- 보고서 맨 앞의 YAML 프런트매터(title/date/target/persona)를 메타로 쓴다.
+  파이프라인이 자동으로 붙이므로 손댈 필요 없다.
+- `docs/` 를 GitHub Pages 소스로 지정하면 폰에서 URL 하나로 전체 보고서를
+  열람한다. Pages 없이도 `docs/index.html` 파일 하나만 열면 된다.
+
+### 원클릭 자동화 (GitHub Actions)
+
+저장소 Secrets 에 `ANTHROPIC_API_KEY` 를 넣고 **Actions → "IR Analyze" →
+Run workflow** 에서 회사·관점을 입력하면, 분석 → 뷰어 갱신 → 커밋까지
+자동으로 돈다. 즉 "회사를 입력하면 경쟁사 비교 분석이 렌더에 쌓이는" 흐름:
+
+```
+[입력: 회사/관점]                        [열람: 모바일]
+ Actions Run workflow ─▶ analyze.py ─▶ analyses/*.md ─▶ render/build.py ─▶ docs/index.html (Pages)
+```
+
 ## 새 관점 추가
 
 페르소나는 `config/personas/<id>.yaml` 파일이다. 템플릿을 복사해 만든다:
@@ -73,7 +99,14 @@ config/
 ir_analysis/
   prompts.py                  # 분석 프롬프트 빌더
   analyze.py                  # CLI 파이프라인
-analyses/                     # 생성된 보고서(.md)
+render/
+  build.py                    # analyses/*.md → docs/index.html 뷰어 빌드
+  template.html               # 뷰어 셸(선택 UI + 마크다운 렌더러)
+analyses/                     # 생성된 보고서(.md, 프런트매터 포함)
+docs/
+  index.html                  # 누적 뷰어(자급식) — GitHub Pages 소스로 지정 가능
+.github/workflows/
+  analyze.yml                 # Actions 원클릭: 입력 → 분석 → 뷰어 갱신 → 커밋
 ```
 
 ## 한계 / 주의

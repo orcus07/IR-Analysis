@@ -1,3 +1,12 @@
+---
+title: "마이크론 FQ3'26 실적·컨콜 분석 — SK하이닉스 마케터 관점"
+date: 2026-06-25
+target: "Micron Technology"
+persona: sk_hynix_marketer
+quarter_anchor: "Micron FQ3'26 (2026-03~05) / 경쟁사 CY1Q'26 (2026-01~03)"
+competitive: true
+---
+
 # 마이크론 FQ3'26 실적·컨콜 분석 — SK하이닉스 마케터 관점
 
 > **케이스 설정**

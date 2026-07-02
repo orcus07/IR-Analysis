@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>IR Analysis — 실적·컨콜 비교 분석</title>
+<style>
+  :root {
+    --bg: #fafaf8; --fg: #1f2328; --muted: #6a737d; --line: #e2e2dd;
+    --card: #ffffff; --accent: #0b57d0; --quote: #f2f4f8; --th: #f4f4f1;
+    --warn: #9a6700;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14161a; --fg: #e6e8eb; --muted: #98a1ab; --line: #2c313a;
+      --card: #1b1f26; --accent: #7fb0ff; --quote: #20242c; --th: #21262e;
+      --warn: #d4a72c;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font: 15px/1.7 -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo",
+      "Pretendard", "Noto Sans KR", "Malgun Gothic", sans-serif;
+    -webkit-text-size-adjust: 100%;
+  }
+  header {
+    position: sticky; top: 0; z-index: 10; background: var(--bg);
+    border-bottom: 1px solid var(--line); padding: 10px 16px;
+  }
+  header h1 { margin: 0 0 8px; font-size: 17px; }
+  header h1 small { color: var(--muted); font-weight: 400; font-size: 12px; margin-left: 6px; }
+  .controls { display: flex; gap: 8px; flex-wrap: wrap; }
+  .controls select {
+    flex: 1 1 160px; min-width: 0; padding: 7px 8px; font-size: 14px;
+    color: var(--fg); background: var(--card); border: 1px solid var(--line);
+    border-radius: 8px;
+  }
+  main { max-width: 780px; margin: 0 auto; padding: 16px 16px 64px; }
+  .meta { color: var(--muted); font-size: 12.5px; margin-bottom: 14px; }
+  article h1 { font-size: 21px; line-height: 1.35; margin: 8px 0 12px; }
+  article h2 {
+    font-size: 17px; margin: 28px 0 10px; padding-bottom: 6px;
+    border-bottom: 1px solid var(--line);
+  }
+  article h3 { font-size: 15.5px; margin: 20px 0 8px; }
+  article p { margin: 10px 0; }
+  article a { color: var(--accent); text-decoration: none; }
+  article a:hover { text-decoration: underline; }
+  article hr { border: 0; border-top: 1px solid var(--line); margin: 24px 0; }
+  article blockquote {
+    margin: 12px 0; padding: 8px 14px; background: var(--quote);
+    border-left: 3px solid var(--accent); border-radius: 0 8px 8px 0;
+    color: var(--fg); font-size: 14.5px;
+  }
+  article ul, article ol { margin: 8px 0; padding-left: 22px; }
+  article li { margin: 4px 0; }
+  article code {
+    background: var(--quote); padding: 1px 5px; border-radius: 4px;
+    font-size: 13px;
+  }
+  .tablewrap { overflow-x: auto; margin: 12px 0; border: 1px solid var(--line); border-radius: 8px; }
+  table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+  th, td { padding: 7px 10px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+  td + td, th + th { border-left: 1px solid var(--line); }
+  th { background: var(--th); font-weight: 600; white-space: nowrap; }
+  tr:last-child td { border-bottom: 0; }
+  .footer-note { color: var(--muted); font-size: 12px; margin-top: 40px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>📊 IR Analysis<small id="count"></small></h1>
+  <div class="controls">
+    <select id="sel-target" aria-label="분석 대상"></select>
+    <select id="sel-report" aria-label="보고서"></select>
+  </div>
+</header>
+<main>
+  <div class="meta" id="meta"></div>
+  <article id="report"></article>
+  <p class="footer-note">공개 정보 기반 참고용 분석 · 투자 권유 아님 ·
+    새 보고서는 <code>python -m ir_analysis.analyze</code> →
+    <code>python -m render.build</code> 로 누적된다.</p>
+</main>
+<script>
+/*__DATA__*/
+
+// ---------- 최소 마크다운 렌더러 (보고서 서식 전용: 제목/표/인용/목록/인라인) ----------
+function esc(s) {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+function inline(s) {
+  s = esc(s);
+  s = s.replace(/`([^`]+)`/g, "<code>$1</code>");
+  s = s.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+  s = s.replace(/\*([^*\n]+)\*/g, "<em>$1</em>");
+  s = s.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g,
+    '<a href="$2" target="_blank" rel="noopener">$1</a>');
+  return s;
+}
+function renderMd(md) {
+  const lines = md.split(/\r?\n/);
+  const out = [];
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i];
+
+    if (/^\s*$/.test(line)) { i++; continue; }
+
+    const h = line.match(/^(#{1,6})\s+(.*)$/);
+    if (h) { out.push(`<h${h[1].length}>${inline(h[2])}</h${h[1].length}>`); i++; continue; }
+
+    if (/^(-{3,}|\*{3,})\s*$/.test(line)) { out.push("<hr>"); i++; continue; }
+
+    if (/^\s*\|/.test(line)) {                       // 표
+      const rows = [];
+      while (i < lines.length && /^\s*\|/.test(lines[i])) rows.push(lines[i++]);
+      const cells = r => r.replace(/^\s*\|/, "").replace(/\|\s*$/, "").split("|").map(c => c.trim());
+      let html = '<div class="tablewrap"><table>';
+      const hasSep = rows.length > 1 && /^[\s|:-]+$/.test(rows[1]);
+      const head = cells(rows[0]);
+      html += "<thead><tr>" + head.map(c => `<th>${inline(c)}</th>`).join("") + "</tr></thead><tbody>";
+      for (let r = hasSep ? 2 : 1; r < rows.length; r++) {
+        html += "<tr>" + cells(rows[r]).map(c => `<td>${inline(c)}</td>`).join("") + "</tr>";
+      }
+      out.push(html + "</tbody></table></div>");
+      continue;
+    }
+
+    if (/^>\s?/.test(line)) {                        // 인용
+      const q = [];
+      while (i < lines.length && /^>\s?/.test(lines[i])) q.push(lines[i++].replace(/^>\s?/, ""));
+      out.push(`<blockquote><p>${inline(q.join(" "))}</p></blockquote>`);
+      continue;
+    }
+
+    const isUl = s => /^\s*[-*]\s+/.test(s), isOl = s => /^\s*\d+\.\s+/.test(s);
+    if (isUl(line) || isOl(line)) {                  // 목록 (연속 들여쓰기 줄 병합)
+      const ordered = isOl(line);
+      const items = [];
+      while (i < lines.length && (isUl(lines[i]) || isOl(lines[i]) || /^\s{2,}\S/.test(lines[i]))) {
+        if (isUl(lines[i]) || isOl(lines[i])) {
+          items.push(lines[i].replace(/^\s*([-*]|\d+\.)\s+/, ""));
+        } else {
+          items[items.length - 1] += " " + lines[i].trim();
+        }
+        i++;
+      }
+      const tag = ordered ? "ol" : "ul";
+      out.push(`<${tag}>` + items.map(t => `<li>${inline(t)}</li>`).join("") + `</${tag}>`);
+      continue;
+    }
+
+    const para = [line];                             // 문단 (연속 줄 병합)
+    i++;
+    while (i < lines.length && lines[i].trim() &&
+           !/^(#{1,6}\s|>\s?|\s*\||\s*[-*]\s|\s*\d+\.\s|-{3,}\s*$)/.test(lines[i])) {
+      para.push(lines[i++]);
+    }
+    out.push(`<p>${inline(para.join(" "))}</p>`);
+  }
+  return out.join("\n");
+}
+
+// ---------- 셀렉터 UI ----------
+const $t = document.getElementById("sel-target");
+const $r = document.getElementById("sel-report");
+const $meta = document.getElementById("meta");
+const $article = document.getElementById("report");
+document.getElementById("count").textContent = ` 보고서 ${REPORTS.length}건`;
+
+const targets = ["전체", ...new Set(REPORTS.map(r => r.target))];
+$t.innerHTML = targets.map(t => `<option>${esc(t)}</option>`).join("");
+
+function fillReports() {
+  const t = $t.value;
+  const list = REPORTS.filter(r => t === "전체" || r.target === t);
+  $r.innerHTML = list.map(r =>
+    `<option value="${esc(r.id)}">${esc(r.date)} · ${esc(r.title)}</option>`).join("");
+  show();
+}
+function show() {
+  const rep = REPORTS.find(r => r.id === $r.value) || REPORTS[0];
+  if (!rep) return;
+  $meta.textContent = [`${rep.date}`, `대상: ${rep.target}`, `관점: ${rep.persona}`,
+                       rep.quarter && `기간: ${rep.quarter}`].filter(Boolean).join("  ·  ");
+  $article.innerHTML = renderMd(rep.md);
+  window.scrollTo(0, 0);
+}
+$t.addEventListener("change", fillReports);
+$r.addEventListener("change", show);
+fillReports();
+</script>
+</body>
+</html>

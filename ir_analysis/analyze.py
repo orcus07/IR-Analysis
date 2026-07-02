@@ -166,7 +166,20 @@ def run(args: argparse.Namespace) -> Path:
     out_dir.mkdir(parents=True, exist_ok=True)
     fname = f"{_dt.date.today().isoformat()}_{_slug(args.target)}_{args.persona}.md"
     out_path = out_dir / fname
-    out_path.write_text(report + "\n", encoding="utf-8")
+
+    # 렌더 뷰어(render/build.py)가 읽는 메타 — 보고서 앞에 프런트매터로 붙인다.
+    front_matter = "\n".join([
+        "---",
+        f'title: "{args.target} 실적·컨콜 분석 — {persona.get("name", args.persona)} 관점"',
+        f"date: {_dt.date.today().isoformat()}",
+        f'target: "{args.target}"',
+        f"persona: {args.persona}",
+        f"competitive: {'true' if args.competitive else 'false'}",
+        f"model: {args.model}",
+        "---",
+        "", "",
+    ])
+    out_path.write_text(front_matter + report + "\n", encoding="utf-8")
 
     u = final.usage
     print(f"\n✔ 저장: {out_path}", file=sys.stderr)
