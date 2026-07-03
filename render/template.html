@@ -91,6 +91,12 @@
   td + td, th + th { border-left: 1px solid var(--line); }
   th { background: var(--th); font-weight: 600; white-space: nowrap; }
   tr:last-child td { border-bottom: 0; }
+  /* 넓은 비교표에서 첫 열(지표명)을 고정해 모바일 가로 스크롤을 돕는다 */
+  th:first-child, td:first-child {
+    position: sticky; left: 0; z-index: 1;
+    background: var(--th); border-right: 1px solid var(--line);
+  }
+  td:first-child { background: var(--bg); font-weight: 600; }
   .footer-note { color: var(--muted); font-size: 12px; margin-top: 40px; }
 </style>
 </head>
@@ -114,6 +120,13 @@
       <label id="custom-persona-wrap" style="display:none">관점 직접 서술
         <textarea id="run-custom-persona" rows="3"
           placeholder="예: 삼성전자 메모리 전략기획 담당자. 경쟁사 실적에서 우리 캐파 투자·HBM 로드맵 결정에 필요한 시사점을 뽑는다."></textarea>
+      </label>
+      <label>분석 범위
+        <select id="run-scope">
+          <option value="both">통합 (실적 + 컨콜)</option>
+          <option value="earnings">IR 실적 딥다이브</option>
+          <option value="call">어닝콜 딥다이브</option>
+        </select>
       </label>
       <label class="row"><input type="checkbox" id="run-competitive" checked> 경쟁사 비교</label>
       <label>경쟁사 (쉼표 구분, 비우면 기본값)
@@ -242,7 +255,9 @@ function fillReports() {
 function show() {
   const rep = REPORTS.find(r => r.id === $r.value) || REPORTS[0];
   if (!rep) return;
+  const scopeLabel = { both: "통합", earnings: "실적", call: "컨콜" }[rep.scope];
   $meta.textContent = [`${rep.date}`, `대상: ${rep.target}`, `관점: ${rep.persona}`,
+                       scopeLabel && `범위: ${scopeLabel}`,
                        rep.quarter && `기간: ${rep.quarter}`].filter(Boolean).join("  ·  ");
   $article.innerHTML = renderMd(rep.md);
   window.scrollTo(0, 0);
@@ -297,6 +312,7 @@ $$("run-btn").addEventListener("click", async () => {
             ? CONFIG.personas[0] : $$("run-persona").value,
           custom_persona: $$("run-persona").value === "__custom__"
             ? $$("run-custom-persona").value.trim() : "",
+          scope: $$("run-scope").value,
           competitive: $$("run-competitive").checked ? "true" : "false",
           competitors: $$("run-competitors").value.trim(),
         },
