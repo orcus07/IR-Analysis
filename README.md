@@ -120,6 +120,30 @@ cp config/personas/_template.yaml config/personas/samsung_strategy.yaml
 python -m ir_analysis.analyze --persona samsung_strategy --target "Micron Technology"
 ```
 
+파일 없이 즉석으로 쓰는 방법 세 가지:
+
+```bash
+# 1) 자유 서술 (렌더 패널의 "✏️ 직접 입력"과 동일)
+python -m ir_analysis.analyze --custom-persona "삼성 메모리 전략기획. 캐파 투자 시사점 중심."
+
+# 2) 다른 레포의 파일을 raw URL로 (렌더 패널의 "🔗 다른 레포에서"와 동일)
+python -m ir_analysis.analyze --persona-url "https://raw.githubusercontent.com/orcus07/<repo>/main/persona.yaml"
+```
+
+### 내 다른 레포의 페르소나 동기화
+
+이미 다른 레포에서 관점/프롬프트를 관리하고 있으면 `config/config.yaml` 에 적는다:
+
+```yaml
+persona_repos:
+  - "orcus07/<다른레포>:<페르소나 디렉터리>"
+```
+
+`python -m ir_analysis.sync_personas` (Actions 실행 시 자동)가 그 레포의
+YAML/MD 파일을 `config/personas/imported/` 로 가져오고, 드롭다운과
+`--persona 레포명__파일명` 에서 바로 쓸 수 있다. MD/TXT는 전문이 viewpoint 로
+들어간다. 프라이빗 레포는 `PERSONAS_TOKEN`(read 권한) Secret 을 등록한다.
+
 ## 구조
 
 ```
