@@ -121,6 +121,17 @@
         <textarea id="run-custom-persona" rows="3"
           placeholder="예: 삼성전자 메모리 전략기획 담당자. 경쟁사 실적에서 우리 캐파 투자·HBM 로드맵 결정에 필요한 시사점을 뽑는다."></textarea>
       </label>
+      <label id="url-persona-wrap" style="display:none">페르소나 raw URL (YAML 또는 프롬프트 텍스트)
+        <input type="text" id="run-persona-url"
+          placeholder="예: https://raw.githubusercontent.com/…/persona.yaml">
+      </label>
+      <label>모델
+        <select id="run-model">
+          <option value="claude-fable-5">Fable 5 — 품질 최상 (기본)</option>
+          <option value="claude-opus-4-8">Opus 4.8 — 균형 (비용 절반)</option>
+          <option value="claude-sonnet-5">Sonnet 5 — 비용형</option>
+        </select>
+      </label>
       <label>분석 범위
         <select id="run-scope">
           <option value="both">통합 (실적 + 컨콜)</option>
@@ -278,10 +289,12 @@ const ghHeaders = token => ({
 
 $$("run-persona").innerHTML =
   CONFIG.personas.map(p => `<option>${esc(p)}</option>`).join("") +
-  `<option value="__custom__">✏️ 직접 입력…</option>`;
+  `<option value="__custom__">✏️ 직접 입력…</option>` +
+  `<option value="__url__">🔗 다른 레포에서 (raw URL)…</option>`;
 $$("run-persona").addEventListener("change", () => {
-  $$("custom-persona-wrap").style.display =
-    $$("run-persona").value === "__custom__" ? "" : "none";
+  const v = $$("run-persona").value;
+  $$("custom-persona-wrap").style.display = v === "__custom__" ? "" : "none";
+  $$("url-persona-wrap").style.display = v === "__url__" ? "" : "none";
 });
 $$("run-branch").value = CONFIG.branch;
 $$("run-token").value = localStorage.getItem("ir_gh_token") || "";
@@ -298,6 +311,10 @@ $$("run-btn").addEventListener("click", async () => {
       !$$("run-custom-persona").value.trim()) {
     status.textContent = "관점 서술을 입력하세요."; return;
   }
+  if ($$("run-persona").value === "__url__" &&
+      !$$("run-persona-url").value.trim()) {
+    status.textContent = "페르소나 URL을 입력하세요."; return;
+  }
   localStorage.setItem("ir_gh_token", token);
   $$("run-btn").disabled = true;
   status.textContent = "실행 요청 중…";
@@ -309,11 +326,14 @@ $$("run-btn").addEventListener("click", async () => {
         ref: $$("run-branch").value.trim(),
         inputs: {
           target,
-          persona: $$("run-persona").value === "__custom__"
+          persona: ["__custom__", "__url__"].includes($$("run-persona").value)
             ? CONFIG.personas[0] : $$("run-persona").value,
           custom_persona: $$("run-persona").value === "__custom__"
             ? $$("run-custom-persona").value.trim() : "",
+          persona_url: $$("run-persona").value === "__url__"
+            ? $$("run-persona-url").value.trim() : "",
           scope: $$("run-scope").value,
+          model: $$("run-model").value,
           competitive: $$("run-competitive").checked ? "true" : "false",
           competitors: $$("run-competitors").value.trim(),
         },

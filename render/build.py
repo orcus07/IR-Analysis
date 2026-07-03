@@ -77,8 +77,8 @@ def build_config() -> dict:
             branch = "main"
     if branch == "HEAD":  # detached
         branch = "main"
-    personas = sorted(p.stem for p in PERSONA_DIR.glob("*.yaml")
-                      if not p.stem.startswith("_"))
+    personas = sorted(p.stem for p in PERSONA_DIR.rglob("*.yaml")
+                      if not p.stem.startswith("_"))  # imported/ 포함
     return {"owner": owner, "repo": repo, "branch": branch,
             "workflow": "analyze.yml", "personas": personas}
 

@@ -46,11 +46,14 @@ def _load_yaml(path: Path) -> dict:
 
 
 def load_persona(persona_id: str) -> dict:
-    path = PERSONA_DIR / f"{persona_id}.yaml"
-    if not path.exists():
-        avail = ", ".join(p.stem for p in PERSONA_DIR.glob("*.yaml") if not p.stem.startswith("_"))
-        sys.exit(f"페르소나 '{persona_id}' 를 찾을 수 없습니다. 사용 가능: {avail}")
-    return _load_yaml(path)
+    # imported/ 는 다른 레포에서 동기화된 페르소나 (ir_analysis.sync_personas)
+    for path in (PERSONA_DIR / f"{persona_id}.yaml",
+                 PERSONA_DIR / "imported" / f"{persona_id}.yaml"):
+        if path.exists():
+            return _load_yaml(path)
+    avail = ", ".join(sorted(p.stem for p in PERSONA_DIR.rglob("*.yaml")
+                             if not p.stem.startswith("_")))
+    sys.exit(f"페르소나 '{persona_id}' 를 찾을 수 없습니다. 사용 가능: {avail}")
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -59,6 +62,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--persona", default=cfg.get("persona", "sk_hynix_marketer"))
     p.add_argument("--custom-persona", default=None, metavar="설명",
                    help="페르소나를 YAML 없이 자유 서술로 지정 (--persona 무시)")
+    p.add_argument("--persona-url", default=None, metavar="URL",
+                   help="외부 저장소(raw URL)의 페르소나 YAML/텍스트를 가져와 사용")
     p.add_argument("--target", default=cfg.get("target", "Micron Technology"))
     comp = p.add_mutually_exclusive_group()
     comp.add_argument("--competitive", dest="competitive", action="store_true")
@@ -115,12 +120,37 @@ def find_previous_report(target: str, out_dir: Path) -> str | None:
     return f"(파일: {best.name})\n{text.strip()[:15000]}"
 
 
+def load_persona_from_url(url: str) -> tuple[dict, str]:
+    """외부 저장소의 페르소나를 가져온다. YAML(name/viewpoint)이면 그대로,
+    아니면 전체 텍스트를 자유 서술 페르소나로 쓴다."""
+    import urllib.request
+    req = urllib.request.Request(url, headers={"User-Agent": "ir-analysis"})
+    with urllib.request.urlopen(req, timeout=30) as r:
+        raw = r.read().decode("utf-8", "replace")
+    data = None
+    try:
+        data = yaml.safe_load(raw)
+    except yaml.YAMLError:
+        pass
+    stem = _slug(url.rstrip("/").rsplit("/", 1)[-1].rsplit(".", 1)[0])[:24]
+    if isinstance(data, dict) and data.get("viewpoint"):
+        return data, "url-" + _slug(str(data.get("name", stem)))[:24]
+    name = raw.strip().splitlines()[0][:40] if raw.strip() else stem
+    return {"name": name, "viewpoint": raw.strip()[:6000]}, f"url-{stem}"
+
+
 def run(args: argparse.Namespace) -> Path:
     if args.custom_persona:
         # 자유 서술 페르소나 — 첫 줄(또는 앞 40자)을 표시 이름으로 쓴다.
         desc = args.custom_persona.strip()
         persona = {"name": desc.splitlines()[0][:40], "viewpoint": desc}
         persona_id = "custom-" + _slug(persona["name"])[:24]
+    elif args.persona_url:
+        try:
+            persona, persona_id = load_persona_from_url(args.persona_url)
+        except Exception as e:
+            sys.exit(f"페르소나 URL을 가져오지 못했습니다: {e}")
+        print(f"🔗 외부 페르소나 로드: {persona.get('name')}", file=sys.stderr)
     else:
         persona = load_persona(args.persona)
         persona_id = args.persona
