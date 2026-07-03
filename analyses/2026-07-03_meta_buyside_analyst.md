@@ -7,10 +7,6 @@ competitive: true
 model: claude-fable-5
 ---
 
-The primary source transcript is available. Now let me pull details for the competitors and additional Meta financials.Almost complete. Let me verify a few remaining details — Alphabet's Q1 actual capex and the Meta transcript details.All data is verified. I now have primary sources (Meta's IR press release, company transcript PDF, 10-Q, Microsoft 8-K/press release, Alphabet earnings release PDF) and cross-checked secondary sources for all four companies. Writing the final report.
-
----
-
 # Meta 최신 실적·컨콜 분석 — 바이사이드 애널리스트 관점
 
 > **케이스 설정**

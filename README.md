@@ -37,9 +37,16 @@ python -m ir_analysis.analyze --persona sk_hynix_marketer \
 
 # 경쟁사 비교 끄기
 python -m ir_analysis.analyze --target "Micron Technology" --no-competitive
+
+# 분석 범위: 통합(both) / IR 실적만(earnings) / 어닝콜만(call)
+python -m ir_analysis.analyze --target "Meta" --scope call
 ```
 
 CLI 인자는 `config/config.yaml` 의 기본값을 덮어쓴다.
+
+**톤 델타**: 같은 대상의 직전 보고서가 `analyses/` 에 있으면 자동으로 주입해
+'직전 대비 톤 델타'(새 메시지/사라진 메시지/확신 수위 변화/가이던스 변경)를
+분석한다. 보고서가 쌓일수록 분석이 깊어진다. 끄려면 `--no-history`.
 
 ### 모델 선택 (품질 1순위 / 비용 2순위)
 

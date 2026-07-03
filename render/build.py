@@ -48,6 +48,7 @@ def parse_report(path: Path) -> dict:
         "date": str(meta["date"]),
         "target": str(meta["target"]),
         "persona": str(meta["persona"]),
+        "scope": str(meta.get("scope", "")),
         "quarter": str(meta.get("quarter_anchor", "")),
         "md": text.strip(),
     }

@@ -7,6 +7,8 @@ competitive: true                    # 경쟁사 비교 on/off
 competitors:                         # competitive=true일 때 동일 프레임으로 비교
   - "SK하이닉스 (SK hynix)"
   - "삼성전자 (Samsung Electronics)"
+scope: both                          # both=통합 | earnings=IR 실적 딥다이브 | call=어닝콜 딥다이브
+history: true                        # 같은 대상의 직전 보고서를 주입해 '톤 델타' 분석
 
 # 모델 선택 — 우선순위: 품질 1순위 / 비용 2순위
 #   claude-fable-5   품질 최상(기본). 가장 유능, 장기 에이전틱·판단 강함. $10/$50, ZDR 불가(30일 보존 필요)

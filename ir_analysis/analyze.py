@@ -65,6 +65,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     comp.add_argument("--no-competitive", dest="competitive", action="store_false")
     p.set_defaults(competitive=cfg.get("competitive", True))
     p.add_argument("--competitors", nargs="*", default=cfg.get("competitors", []))
+    p.add_argument("--scope", default=cfg.get("scope", "both"),
+                   choices=["both", "earnings", "call"],
+                   help="both=통합 / earnings=IR 실적 딥다이브 / call=어닝콜 딥다이브")
+    p.add_argument("--no-history", dest="history", action="store_false",
+                   help="같은 대상의 직전 보고서 주입(톤 델타 분석)을 끈다")
+    p.set_defaults(history=cfg.get("history", True))
     p.add_argument("--model", default=cfg.get("model", "claude-opus-4-8"))
     p.add_argument("--effort", default=cfg.get("effort", "high"),
                    choices=["low", "medium", "high", "xhigh", "max"])
@@ -79,6 +85,36 @@ def _slug(text: str) -> str:
     return s[:40] or "report"
 
 
+_FRONT_MATTER = re.compile(r"\A---\s*\n(.*?)\n---\s*\n", re.S)
+
+
+def find_previous_report(target: str, out_dir: Path) -> str | None:
+    """같은 대상을 다룬 가장 최근 보고서 본문(출처 목록 제외)을 돌려준다."""
+    tslug = _slug(target)
+    best: Path | None = None
+    for p in sorted(out_dir.glob("*.md")):  # 파일명이 날짜로 시작 → 정렬 = 시간순
+        text_head = p.read_text(encoding="utf-8")[:2000]
+        m = _FRONT_MATTER.match(text_head)
+        fm_target = ""
+        if m:
+            fm_target = str((yaml.safe_load(m.group(1)) or {}).get("target", ""))
+        if _slug(fm_target) == tslug or f"_{tslug}_" in p.name:
+            best = p
+    if best is None:
+        return None
+    text = best.read_text(encoding="utf-8")
+    m = _FRONT_MATTER.match(text)
+    if m:
+        text = text[m.end():]
+    # 출처 목록은 델타 분석에 불필요 — 잘라서 토큰을 아낀다.
+    for marker in ("\n### 출처", "\n## 출처", "\n### Sources", "\n## Sources"):
+        idx = text.find(marker)
+        if idx != -1:
+            text = text[:idx]
+            break
+    return f"(파일: {best.name})\n{text.strip()[:15000]}"
+
+
 def run(args: argparse.Namespace) -> Path:
     if args.custom_persona:
         # 자유 서술 페르소나 — 첫 줄(또는 앞 40자)을 표시 이름으로 쓴다.
@@ -89,6 +125,13 @@ def run(args: argparse.Namespace) -> Path:
         persona = load_persona(args.persona)
         persona_id = args.persona
 
+    out_dir = ROOT / args.output_dir
+    previous_report = None
+    if args.history and out_dir.exists():
+        previous_report = find_previous_report(args.target, out_dir)
+        if previous_report:
+            print(f"↺ 직전 보고서 발견 → 톤 델타 분석 포함", file=sys.stderr)
+
     user_prompt = build_user_prompt(
         persona_name=persona.get("name", persona_id),
         persona_viewpoint=persona.get("viewpoint", ""),
@@ -97,6 +140,8 @@ def run(args: argparse.Namespace) -> Path:
         target=args.target,
         competitive=args.competitive,
         competitors=args.competitors,
+        scope=args.scope,
+        previous_report=previous_report,
         output_language=persona.get("output_language", "한국어"),
     )
 
@@ -171,9 +216,15 @@ def run(args: argparse.Namespace) -> Path:
         sys.exit("보고서 텍스트가 비어 있습니다 (stop_reason="
                  f"{final.stop_reason}). max_tokens 를 늘려 보세요.")
 
-    out_dir = ROOT / args.output_dir
+    # 검색 진행 중계 등 제목 앞의 정크를 잘라낸다 — 보고서는 '#' 제목부터.
+    m = re.search(r"^#\s", report, re.M)
+    if m and m.start() > 0:
+        report = report[m.start():]
+
     out_dir.mkdir(parents=True, exist_ok=True)
-    fname = f"{_dt.date.today().isoformat()}_{_slug(args.target)}_{persona_id}.md"
+    scope_suffix = "" if args.scope == "both" else f"-{args.scope}"
+    fname = (f"{_dt.date.today().isoformat()}_{_slug(args.target)}"
+             f"_{persona_id}{scope_suffix}.md")
     out_path = out_dir / fname
 
     # 렌더 뷰어(render/build.py)가 읽는 메타 — 보고서 앞에 프런트매터로 붙인다.
@@ -183,6 +234,7 @@ def run(args: argparse.Namespace) -> Path:
         f"date: {_dt.date.today().isoformat()}",
         f'target: "{args.target}"',
         f"persona: {persona_id}",
+        f"scope: {args.scope}",
         f"competitive: {'true' if args.competitive else 'false'}",
         f"model: {args.model}",
         "---",
