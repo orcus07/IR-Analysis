@@ -46,18 +46,42 @@ def _slug(text: str) -> str:
     return re.sub(r"[^A-Za-z0-9가-힣]+", "-", text).strip("-").lower() or "persona"
 
 
+def _discover_files(repo: str, path: str) -> list[dict]:
+    """대상 파일 목록. 경로를 지정하면 그 디렉터리, 비우면 레포 전체 트리에서
+    persona/prompt/agent 냄새가 나는 파일을 찾고, 없으면 루트의 파일을 쓴다."""
+    if path:
+        listing = json.loads(_fetch(
+            f"https://api.github.com/repos/{repo}/contents/{path}"))
+        if isinstance(listing, dict):
+            listing = [listing]
+        return [i for i in listing if i.get("type") == "file"]
+
+    tree = json.loads(_fetch(
+        f"https://api.github.com/repos/{repo}/git/trees/HEAD?recursive=1"))
+    hits: list[dict] = []
+    root: list[dict] = []
+    for node in tree.get("tree", []):
+        p = node.get("path", "")
+        if node.get("type") != "blob" or not p.lower().endswith(_EXTS):
+            continue
+        entry = {
+            "name": p.rsplit("/", 1)[-1],
+            "download_url": f"https://raw.githubusercontent.com/{repo}/HEAD/{p}",
+        }
+        if any(k in p.lower() for k in ("persona", "prompt", "agent", "관점")):
+            hits.append(entry)
+        elif "/" not in p:
+            root.append(entry)
+    return (hits or root)[:40]  # 과다 수집 방지
+
+
 def sync_repo(spec: str) -> int:
     repo, _, path = spec.partition(":")
-    listing = json.loads(_fetch(
-        f"https://api.github.com/repos/{repo}/contents/{path}".rstrip("/")))
-    if isinstance(listing, dict):
-        listing = [listing]
-
     count = 0
     prefix = _slug(repo.split("/")[-1])
-    for item in listing:
+    for item in _discover_files(repo, path):
         name = item.get("name", "")
-        if item.get("type") != "file" or not name.lower().endswith(_EXTS):
+        if not name.lower().endswith(_EXTS):
             continue
         raw = _fetch(item["download_url"])
         stem = _slug(name.rsplit(".", 1)[0])
