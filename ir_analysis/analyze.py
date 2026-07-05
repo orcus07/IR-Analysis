@@ -188,7 +188,14 @@ def run(args: argparse.Namespace) -> Path:
         "name": "web_search",
         "max_uses": args.max_search_uses,
     }]
-    messages = [{"role": "user", "content": user_prompt}]
+    # 프롬프트 캐싱: 시스템(+스타일 가이드)과 사용자 프롬프트(직전 보고서 포함)가
+    # 길고, pause_turn 마다 같은 접두가 재전송되므로 캐시 브레이크포인트를 건다.
+    system_blocks = [{"type": "text", "text": system_prompt,
+                      "cache_control": {"type": "ephemeral"}}]
+    messages = [{"role": "user", "content": [
+        {"type": "text", "text": user_prompt,
+         "cache_control": {"type": "ephemeral"}},
+    ]}]
 
     print(f"▶ 분석 시작: 대상={args.target} / 관점={persona.get('name')} / "
           f"경쟁분석={'ON' if args.competitive else 'OFF'}", file=sys.stderr)
@@ -199,7 +206,7 @@ def run(args: argparse.Namespace) -> Path:
 
     def open_stream(msgs):
         base = dict(
-            model=args.model, max_tokens=args.max_tokens, system=system_prompt,
+            model=args.model, max_tokens=args.max_tokens, system=system_blocks,
             thinking={"type": "adaptive"}, output_config={"effort": args.effort},
             tools=tools, messages=msgs,
         )
@@ -251,11 +258,23 @@ def run(args: argparse.Namespace) -> Path:
     if m and m.start() > 0:
         report = report[m.start():]
 
+    # max_tokens 로 잘린 보고서는 눈에 띄게 표시한다(조용한 불완전 저장 방지).
+    truncated = final.stop_reason == "max_tokens"
+    if truncated:
+        report += ("\n\n---\n\n> ⚠️ **불완전한 보고서** — 출력 토큰 한도"
+                   f"(max_tokens={args.max_tokens})에 걸려 끝이 잘렸다. "
+                   "`--max-tokens` 를 늘려 다시 실행할 것.")
+        print(f"⚠️ 보고서가 max_tokens({args.max_tokens})로 잘렸습니다 — "
+              "--max-tokens 를 늘려 재실행하세요.", file=sys.stderr)
+
     out_dir.mkdir(parents=True, exist_ok=True)
     scope_suffix = "" if args.scope == "both" else f"-{args.scope}"
     fname = (f"{_dt.date.today().isoformat()}_{_slug(args.target)}"
              f"_{persona_id}{scope_suffix}.md")
     out_path = out_dir / fname
+    if out_path.exists():  # 같은 날 재실행 → 덮어쓰지 않고 시각을 붙인다
+        fname = f"{fname[:-3]}_{_dt.datetime.now():%H%M}.md"
+        out_path = out_dir / fname
 
     # 렌더 뷰어(render/build.py)가 읽는 메타 — 보고서 앞에 프런트매터로 붙인다.
     front_matter = "\n".join([
@@ -267,6 +286,7 @@ def run(args: argparse.Namespace) -> Path:
         f"scope: {args.scope}",
         f"competitive: {'true' if args.competitive else 'false'}",
         f"model: {args.model}",
+        *(["truncated: true"] if truncated else []),
         "---",
         "", "",
     ])

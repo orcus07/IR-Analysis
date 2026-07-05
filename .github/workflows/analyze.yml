@@ -52,6 +52,11 @@ on:
 permissions:
   contents: write
 
+# 동시 실행 방지 — 두 분석이 겹치면 순서대로 큐잉(푸시 충돌 예방)
+concurrency:
+  group: ir-analyze
+  cancel-in-progress: false
+
 jobs:
   analyze:
     runs-on: ubuntu-latest
@@ -107,4 +112,12 @@ jobs:
           git add analyses docs
           git diff --cached --quiet && echo "변경 없음" && exit 0
           git commit -m "Add analysis: ${{ inputs.target }} (${{ inputs.persona }})"
-          git push
+          # 다른 실행과 푸시가 겹치면: 리베이스(-X theirs = 우리 커밋 우선) 후
+          # 뷰어를 다시 빌드해 양쪽 보고서를 모두 담아 재시도한다.
+          for i in 1 2 3; do
+            git push && break
+            git pull --rebase -X theirs
+            python -m render.build
+            git add analyses docs
+            git commit --amend --no-edit
+          done
