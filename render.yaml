@@ -15,5 +15,7 @@ services:
     buildCommand: (python3 -m pip install pyyaml && python3 -m render.build) || echo "using committed docs/"
     staticPublishPath: docs
     envVars:
+      # Actions(analyze.yml)의 파이썬과 동일 계열로 고정 — 버전 불일치로 인한
+      # "CI에서는 되는데 Render 빌드만 깨짐"을 방지한다.
       - key: PYTHON_VERSION
-        value: 3.11.9
+        value: 3.12.7
