@@ -27,5 +27,5 @@ persona_repos:
 model: claude-fable-5
 effort: xhigh                        # low | medium | high | xhigh | max  (품질 민감 작업은 xhigh 권장)
 max_tokens: 32000
-max_search_uses: 25                  # 웹검색 호출 상한
+max_search_uses: 15                  # 웹검색 호출 상한(한 회사 분석엔 12~15로 충분; 비용·누적 컨텍스트 절감)
 output_dir: analyses
