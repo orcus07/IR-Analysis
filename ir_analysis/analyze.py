@@ -39,6 +39,18 @@ STYLE_GUIDE_PATH = ROOT / "config" / "style_guide.md"
 # Opus 4.8/4.7/4.6 + Sonnet 4.6 의 동적 필터링 웹검색 변형
 WEB_SEARCH_TOOL_TYPE = "web_search_20260209"
 
+# 캐시 브레이크포인트를 붙일 수 있는 블록 타입(thinking 블록은 불가).
+_CACHEABLE_BLOCKS = {
+    "text", "tool_use", "server_tool_use", "tool_result",
+    "web_search_tool_result", "web_fetch_tool_result", "document", "image",
+}
+# 비용 로깅용 참고 단가(백만 토큰당, 입력/출력). 캐시 읽기 0.1×·쓰기 1.25×(5분).
+_PRICE = {
+    "claude-fable-5": (10.0, 50.0), "claude-mythos-5": (10.0, 50.0),
+    "claude-opus-4-8": (5.0, 25.0), "claude-opus-4-7": (5.0, 25.0),
+    "claude-sonnet-5": (3.0, 15.0),
+}
+
 
 def _load_yaml(path: Path) -> dict:
     with open(path, "r", encoding="utf-8") as f:
@@ -92,6 +104,30 @@ def _slug(text: str) -> str:
 
 _FRONT_MATTER = re.compile(r"\A---\s*\n(.*?)\n---\s*\n", re.S)
 
+# 톤 델타에 필요한 고신호 섹션(결론·시사점 등)만 남긴다.
+_KEEP_SECTION = ("결론", "시사점", "임플리케이션", "implication", "요약", "델타")
+
+
+def _slim_report(body: str) -> str:
+    """직전 보고서를 압축한다. 표·발췌를 빼되 '무엇을 말했나'는 보존한다.
+    결론·시사점(보고서 끝에 위치)이 잘리지 않도록 뼈대와 별도 예산을 준다."""
+    skeleton, signal = [], []       # 뼈대(제목+케이스설정) / 고신호(결론·시사점 본문)
+    keep = False
+    for ln in body.splitlines():
+        h = re.match(r"^(#{1,6})\s+(.*)", ln)
+        if h:
+            keep = any(k in h.group(2).lower() for k in _KEEP_SECTION)
+            skeleton.append(ln)                  # 제목은 항상(구조 보존)
+            if keep:
+                signal.append(ln)
+        elif ln.startswith(">"):
+            skeleton.append(ln)                  # 케이스 설정 인용
+        elif keep and ln.strip():
+            signal.append(ln)                    # 결론·시사점 본문
+    head = "\n".join(skeleton).strip()[:900]
+    body_signal = "\n".join(signal).strip()[:2400]
+    return (head + "\n\n[직전 보고서 핵심]\n" + body_signal).strip()
+
 
 def find_previous_report(target: str, out_dir: Path) -> str | None:
     """같은 대상을 다룬 가장 최근 보고서 본문(출처 목록 제외)을 돌려준다."""
@@ -117,7 +153,7 @@ def find_previous_report(target: str, out_dir: Path) -> str | None:
         if idx != -1:
             text = text[:idx]
             break
-    return f"(파일: {best.name})\n{text.strip()[:15000]}"
+    return f"(파일: {best.name})\n{_slim_report(text)}"
 
 
 def load_persona_from_url(url: str) -> tuple[dict, str]:
@@ -188,10 +224,9 @@ def run(args: argparse.Namespace) -> Path:
         "name": "web_search",
         "max_uses": args.max_search_uses,
     }]
-    # 프롬프트 캐싱: 시스템(+스타일 가이드)과 사용자 프롬프트(직전 보고서 포함)가
-    # 길고, pause_turn 마다 같은 접두가 재전송되므로 캐시 브레이크포인트를 건다.
-    system_blocks = [{"type": "text", "text": system_prompt,
-                      "cache_control": {"type": "ephemeral"}}]
+    # 프롬프트 캐싱: 시스템은 짧아(최소 프리픽스 미달) 단독 캐시가 안 되므로,
+    # 첫 사용자 메시지에 브레이크포인트를 걸어 tools+system+user 를 한 번에 캐시한다.
+    # (system 은 이 접두에 포함돼 함께 캐시된다.)
     messages = [{"role": "user", "content": [
         {"type": "text", "text": user_prompt,
          "cache_control": {"type": "ephemeral"}},
@@ -206,7 +241,7 @@ def run(args: argparse.Namespace) -> Path:
 
     def open_stream(msgs):
         base = dict(
-            model=args.model, max_tokens=args.max_tokens, system=system_blocks,
+            model=args.model, max_tokens=args.max_tokens, system=system_prompt,
             thinking={"type": "adaptive"}, output_config={"effort": args.effort},
             tools=tools, messages=msgs,
         )
@@ -220,9 +255,27 @@ def run(args: argparse.Namespace) -> Path:
                 pass  # 설치된 SDK가 fallbacks 미지원 → 일반 경로
         return client.messages.stream(**base)
 
+    def cache_latest_assistant():
+        """직전에 붙인 assistant 턴의 마지막 캐시가능 블록에만 브레이크포인트를
+        남긴다(과거 assistant 마커는 제거). 4개 상한을 지키며 누적 검색결과가
+        다음 pause_turn 에서 cache read(0.1×)로 재사용되게 한다."""
+        newest = None
+        for msg in messages:
+            if msg["role"] != "assistant":
+                continue
+            for blk in msg["content"]:
+                if getattr(blk, "cache_control", None) is not None:
+                    blk.cache_control = None          # 과거 마커 해제
+            last = next((b for b in reversed(msg["content"])
+                         if getattr(b, "type", None) in _CACHEABLE_BLOCKS), None)
+            newest = last or newest
+        if newest is not None:
+            newest.cache_control = {"type": "ephemeral"}
+
     # 서버측 웹검색은 한 응답 안에서 최대 10회 반복 후 pause_turn 으로 멈출 수 있다.
     # pause_turn 이면 대화를 그대로 다시 보내 이어서 진행한다.
     final = None
+    agg = {"input": 0, "cache_read": 0, "cache_write": 0, "output": 0}
     for _ in range(8):  # pause_turn 연속 처리 상한
         try:
             with open_stream(messages) as stream:
@@ -237,8 +290,19 @@ def run(args: argparse.Namespace) -> Path:
             sys.exit(f"요청 거부(400): {getattr(e, 'message', e)}{hint}")
         print(file=sys.stderr)
 
+        u = final.usage
+        agg["input"] += u.input_tokens
+        agg["cache_read"] += getattr(u, "cache_read_input_tokens", 0) or 0
+        agg["cache_write"] += getattr(u, "cache_creation_input_tokens", 0) or 0
+        agg["output"] += u.output_tokens
+        print(f"  · 입력 {u.input_tokens} / 캐시읽기 "
+              f"{getattr(u, 'cache_read_input_tokens', 0) or 0} / 캐시쓰기 "
+              f"{getattr(u, 'cache_creation_input_tokens', 0) or 0} / 출력 "
+              f"{u.output_tokens}", file=sys.stderr)
+
         if final.stop_reason == "pause_turn":
             messages.append({"role": "assistant", "content": final.content})
+            cache_latest_assistant()  # 누적 검색결과에 캐시 브레이크포인트 이동
             print("… (pause_turn) 검색 이어서 진행", file=sys.stderr)
             continue
         break
@@ -292,9 +356,19 @@ def run(args: argparse.Namespace) -> Path:
     ])
     out_path.write_text(front_matter + report + "\n", encoding="utf-8")
 
-    u = final.usage
+    served = getattr(final, "model", None) or args.model
+    in_rate, out_rate = _PRICE.get(served, _PRICE.get(args.model, (10.0, 50.0)))
+    # 캐시 읽기 0.1×·쓰기 1.25×(5분 TTL) 근사. 웹서치 툴 과금은 별도(미포함).
+    est = (agg["input"] * in_rate + agg["cache_read"] * in_rate * 0.1
+           + agg["cache_write"] * in_rate * 1.25 + agg["output"] * out_rate) / 1e6
+    total_in = agg["input"] + agg["cache_read"] + agg["cache_write"]
+    hit = agg["cache_read"] / total_in * 100 if total_in else 0.0
     print(f"\n✔ 저장: {out_path}", file=sys.stderr)
-    print(f"  입력 {u.input_tokens} / 출력 {u.output_tokens} 토큰", file=sys.stderr)
+    print(f"  누적 입력 {agg['input']} (캐시읽기 {agg['cache_read']} / 쓰기 "
+          f"{agg['cache_write']}, 적중률 {hit:.0f}%) / 출력 {agg['output']} 토큰",
+          file=sys.stderr)
+    print(f"  추정 비용 ≈ ${est:.2f}  (모델 {served}, 웹서치 툴 과금 별도)",
+          file=sys.stderr)
     return out_path
 
 
