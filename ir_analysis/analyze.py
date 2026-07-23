@@ -24,12 +24,10 @@ from pathlib import Path
 
 import yaml
 
-try:
-    import anthropic
-except ImportError:  # pragma: no cover
-    sys.exit("anthropic SDK가 필요합니다: pip install -r requirements.txt")
-
 from ir_analysis.prompts import SYSTEM_PROMPT, build_user_prompt
+
+# anthropic 은 실제 분석 실행 시에만 필요하다. 모듈 임포트 시점에 요구하지 않아
+# strip_preamble 같은 순수 함수를 API 키·SDK 없이 스모크에서 검증할 수 있게 한다.
 
 ROOT = Path(__file__).resolve().parent.parent
 CONFIG_PATH = ROOT / "config" / "config.yaml"
@@ -175,6 +173,21 @@ def load_persona_from_url(url: str) -> tuple[dict, str]:
     return {"name": name, "viewpoint": raw.strip()[:6000]}, f"url-{stem}"
 
 
+def strip_preamble(report: str) -> str:
+    """보고서 '#' H1 제목 앞의 정크(검색 진행 중계 등)를 잘라낸다.
+
+    스트리밍에서 중계 텍스트 블록과 보고서 블록이 개행 없이 이어지면
+    (…comparison table.# 제목) 줄머리(^)만으로는 못 잡는다. 그래서 줄머리 H1을
+    우선 찾고, 없으면 앞 글자에 바로 붙은 '# '(글루 케이스)로 폴백한다. 폴백은 앞
+    글자가 공백도 '#'도 아닌 경우로 한정해 하위 헤딩('## …')의 둘째 '#'를 제목으로
+    오인해 자르지 않는다. 제목이 이미 맨 앞이면 그대로 둔다.
+    """
+    m = re.search(r"(?m)^#\s", report) or re.search(r"(?<=[^\s#])#\s", report)
+    if m and m.start() > 0:
+        return report[m.start():]
+    return report
+
+
 def run(args: argparse.Namespace) -> Path:
     if args.custom_persona:
         # 자유 서술 페르소나 — 첫 줄(또는 앞 40자)을 표시 이름으로 쓴다.
@@ -217,6 +230,11 @@ def run(args: argparse.Namespace) -> Path:
             "\n\n[우리말 작성 스타일 가이드 — 반드시 준수]\n"
             + STYLE_GUIDE_PATH.read_text(encoding="utf-8")
         )
+
+    try:
+        import anthropic
+    except ImportError:  # pragma: no cover
+        sys.exit("anthropic SDK가 필요합니다: pip install -r requirements.txt")
 
     client = anthropic.Anthropic()
     tools = [{
@@ -317,10 +335,7 @@ def run(args: argparse.Namespace) -> Path:
         sys.exit("보고서 텍스트가 비어 있습니다 (stop_reason="
                  f"{final.stop_reason}). max_tokens 를 늘려 보세요.")
 
-    # 검색 진행 중계 등 제목 앞의 정크를 잘라낸다 — 보고서는 '#' 제목부터.
-    m = re.search(r"^#\s", report, re.M)
-    if m and m.start() > 0:
-        report = report[m.start():]
+    report = strip_preamble(report)  # 제목 앞 검색 진행 중계 등 정크 제거
 
     # max_tokens 로 잘린 보고서는 눈에 띄게 표시한다(조용한 불완전 저장 방지).
     truncated = final.stop_reason == "max_tokens"
