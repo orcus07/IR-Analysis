@@ -8,7 +8,7 @@ competitive: true
 model: claude-opus-4-8
 ---
 
-I'll start by searching the web for the latest quarterly earnings for Alphabet, Microsoft, and Meta.The latest quarter is Alphabet Q2 2026 (Apr–Jun 2026), announced July 22, 2026 — the **same quarter** as the previous report. Let me fix my parsing and gather the earnings call transcript details plus competitor data.This is a **same-quarter re-analysis** — the previous report also covered Q2 2026. Note the timing mismatch: Alphabet is CY Q2 (Apr–Jun 2026) while Microsoft (Q3 FY2026) and Meta (Q1 2026) latest reports are CY Q1 (Jan–Mar 2026). Let me pull transcript quotes and competitor specifics.Rich detail captured. Now let me get the consensus numbers for Alphabet and the two competitors' latest-quarter specifics.Now let me nail down Alphabet's consensus estimates, the "clean" EPS, operating income, and stock reaction.I have comprehensive data. Let me get two final data points: Microsoft's actual quarterly capex/total revenue growth and Meta's Q1 actual capex spend, to complete the comparison table.# Alphabet 최신 실적·컨콜 분석 — 바이사이드 애널리스트 관점
+# Alphabet 최신 실적·컨콜 분석 — 바이사이드 애널리스트 관점
 
 > **케이스 설정** · 페르소나: 메모리 반도체(HBM/DRAM/NAND) 담당 바이사이드 애널리스트 / 분석 대상: **Alphabet — Q2 2026(4~6월), 2026-07-22(미 동부) 장 마감 후 발표** / 경쟁 분석: **ON (Microsoft·Meta)** / 작성일: 2026-07-23
 >
